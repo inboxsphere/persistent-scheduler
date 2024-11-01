@@ -11,7 +11,7 @@ pub mod meta;
 
 static DB: OnceCell<Database> = OnceCell::new();
 
-pub static MODELS: Lazy<Models> = Lazy::new(|| {
+pub static TASK_SCHEDULER_MODELS: Lazy<Models> = Lazy::new(|| {
     let mut models = Models::new();
     models
         .define::<TaskMetaEntity>()
@@ -37,7 +37,7 @@ pub fn init_nativedb(
 
     let database = Builder::new()
         .set_cache_size(cache_size as usize)
-        .create(&MODELS, db_file.as_str());
+        .create(&TASK_SCHEDULER_MODELS, db_file.as_str());
 
     if let Err(e) = database {
         error!("Error init native db {:?}", e);
