@@ -1,4 +1,4 @@
-## Rust Task Scheduling System
+## Rust Persistent Task Scheduling System
 
 ### Overview
 
@@ -17,7 +17,7 @@ A high-performance task scheduling system developed in Rust using Tokio. This sy
 ```rust
 use std::time::Duration;
 
-use task_scheduler::{
+use persistent_scheduler::{
     core::{
         context::TaskContext,
         store::TaskStore,
