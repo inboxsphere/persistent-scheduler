@@ -544,6 +544,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "persistent-scheduler"
+version = "0.1.6"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "chrono-tz",
+ "croner",
+ "itertools",
+ "native_db",
+ "native_model",
+ "once_cell",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "ulid",
+]
+
+[[package]]
 name = "phf"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -896,28 +918,6 @@ dependencies = [
  "ntapi",
  "rayon",
  "windows",
-]
-
-[[package]]
-name = "task-scheduler"
-version = "0.1.6"
-dependencies = [
- "async-trait",
- "chrono",
- "chrono-tz",
- "croner",
- "itertools",
- "native_db",
- "native_model",
- "once_cell",
- "serde",
- "serde_json",
- "sysinfo",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "ulid",
 ]
 
 [[package]]

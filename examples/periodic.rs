@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use task_scheduler::core::periodic::PeriodicTask;
+use persistent_scheduler::core::periodic::PeriodicTask;
 
 #[tokio::main]
 async fn main() {

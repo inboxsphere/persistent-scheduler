@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use task_scheduler::{
+use persistent_scheduler::{
     core::{
         context::TaskContext,
         store::TaskStore,

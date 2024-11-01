@@ -1,12 +1,12 @@
 [package]
-name = "task-scheduler"
+name = "persistent-scheduler"
 version = "0.1.6"
 author = "Pedro Rocha"
 edition = "2021"
 description = "A high-performance task scheduling system developed in Rust using Tokio. This system supports task persistence, repeatable tasks, Cron-based scheduling, and one-time tasks, ensuring reliability and flexibility for managing time-based operations in various applications."
 license-file = "LICENSE"
-documentation = "https://docs.rs/task-scheduler/0.1.6/"
-repository = "https://github.com/inboxsphere/task-scheduler"
+documentation = "https://docs.rs/persistent-scheduler/0.1.6/"
+repository = "https://github.com/inboxsphere/persistent-scheduler"
 
 [features]
 default = ["nativedb"]
