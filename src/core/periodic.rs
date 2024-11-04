@@ -52,18 +52,21 @@ impl PeriodicTask {
     /// # Requirements
     ///
     /// The future must output a `Result` with a unit value or a `BoxError` on failure.
-    pub fn start_with_signal<F>(
+    pub fn start_with_signal<F, P>(
         self: Arc<Self>,
-        task: Arc<dyn Fn() -> F + Send + Sync>,
+        task: Arc<dyn Fn(Option<Arc<P>>) -> F + Send + Sync>,
+        param: Option<Arc<P>>,
         interval: Duration,
     ) where
         F: Future<Output = Result<(), BoxError>> + Send + 'static,
+        P: Send + Sync + 'static,
     {
         // Clone the periodic task instance for the task runner.
         let task_clone = Arc::clone(&self);
+        let param_clone = param.clone();
         let task_runner = async move {
             // Run the task periodically.
-            task_clone.run(task.clone(), interval).await;
+            task_clone.run(task.clone(), param_clone, interval).await;
         };
 
         // Clone the periodic task instance for the signal handler.
@@ -103,9 +106,14 @@ impl PeriodicTask {
     /// # Type Parameters
     ///
     /// * `F`: The type of the future returned by the task function.
-    async fn run<F>(self: Arc<Self>, task: Arc<dyn Fn() -> F + Send + Sync>, interval: Duration)
-    where
+    async fn run<F, P>(
+        self: Arc<Self>,
+        task: Arc<dyn Fn(Option<Arc<P>>) -> F + Send + Sync>,
+        param: Option<Arc<P>>,
+        interval: Duration,
+    ) where
         F: Future<Output = Result<(), BoxError>> + Send + 'static,
+        P: Send + Sync + 'static,
     {
         info!("Periodic task '{}' started", &self.name);
         loop {
@@ -116,8 +124,9 @@ impl PeriodicTask {
             }
 
             let task_clone = Arc::clone(&task);
+            let param_clone = param.clone();
             let task_future = tokio::spawn(async move {
-                task_clone().await // Execute the task.
+                task_clone(param_clone).await // Execute the task.
             });
 
             // Handle the result of the task execution.

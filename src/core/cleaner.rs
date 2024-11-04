@@ -48,7 +48,7 @@ where
         let self_clone = Arc::clone(&self);
 
         // Create a closure that will perform the cleanup task.
-        let task = Arc::new(move || {
+        let task = Arc::new(move |_: Option<Arc<String>>| {
             // Clone the task store for the cleanup operation.
             let task_store = Arc::clone(&self_clone.task_store);
             // Return a pinned future that performs the cleanup operation.
@@ -56,6 +56,8 @@ where
         });
 
         // Start the periodic task that will execute the cleanup operation at the specified interval.
-        self.periodic_task.clone().start_with_signal(task, interval);
+        self.periodic_task
+            .clone()
+            .start_with_signal(task, None, interval);
     }
 }
