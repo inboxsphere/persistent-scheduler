@@ -115,7 +115,7 @@ impl PeriodicTask {
         F: Future<Output = Result<(), BoxError>> + Send + 'static,
         P: Send + Sync + 'static,
     {
-        info!("Periodic task '{}' started", &self.name);
+        info!("task '{}' started", &self.name);
         loop {
             // Check if shutdown is triggered
             let triggered = self.shutdown.read().await;
@@ -132,23 +132,23 @@ impl PeriodicTask {
             // Handle the result of the task execution.
             match task_future.await {
                 Ok(Ok(_)) => {
-                    info!("Periodic task '{}' completed successfully.", &self.name);
+                    info!("task '{}' completed successfully.", &self.name);
                 }
                 Ok(Err(e)) => {
-                    warn!("Periodic task '{}' failed: {:?}", &self.name, e);
+                    warn!("task '{}' failed: {:?}", &self.name, e);
                 }
                 Err(e) if e.is_panic() => {
-                    error!("Fatal: Periodic task '{}' encountered a panic.", &self.name);
+                    error!("Fatal: task '{}' encountered a panic.", &self.name);
                 }
                 Err(e) => {
                     error!(
-                        "Periodic task '{}' failed unexpectedly: {:?}",
+                        "task '{}' failed unexpectedly: {:?}",
                         &self.name, e
                     );
                 }
             }
             sleep(interval).await;
         }
-        info!("Periodic task '{}' stopped", &self.name);
+        info!("task '{}' stopped", &self.name);
     }
 }
