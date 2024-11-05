@@ -30,7 +30,7 @@ pub fn init_nativedb(
 
     let db_file = db_path.unwrap_or_else(|| {
         std::env::temp_dir()
-            .join("polly-scheduler.db")
+            .join("task-scheduler.db")
             .to_string_lossy()
             .into_owned()
     });
