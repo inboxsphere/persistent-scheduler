@@ -131,9 +131,7 @@ impl PeriodicTask {
 
             // Handle the result of the task execution.
             match task_future.await {
-                Ok(Ok(_)) => {
-                    info!("task '{}' completed successfully.", &self.name);
-                }
+                Ok(Ok(_)) => {}
                 Ok(Err(e)) => {
                     warn!("task '{}' failed: {:?}", &self.name, e);
                 }
@@ -141,10 +139,7 @@ impl PeriodicTask {
                     error!("Fatal: task '{}' encountered a panic.", &self.name);
                 }
                 Err(e) => {
-                    error!(
-                        "task '{}' failed unexpectedly: {:?}",
-                        &self.name, e
-                    );
+                    error!("task '{}' failed unexpectedly: {:?}", &self.name, e);
                 }
             }
             sleep(interval).await;
