@@ -2,7 +2,8 @@ use crate::core::error::SchedulerError;
 use crate::core::model::{Retry, TaskMeta, TaskStatus};
 use crate::core::task_kind::TaskKind;
 use native_db::*;
-use native_model::{native_model, Model};
+use native_model::native_model;
+use native_model::Model;
 use once_cell::sync::{Lazy, OnceCell};
 use serde::{Deserialize, Serialize};
 use tracing::error;
@@ -53,7 +54,7 @@ pub fn get_database() -> Result<&'static Database<'static>, SchedulerError> {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[native_model(id = 2, version = 1)]
+#[native_model(id = 1, version = 1)]
 #[native_db]
 pub struct TaskMetaEntity {
     #[primary_key]
@@ -76,7 +77,7 @@ pub struct TaskMetaEntity {
     pub runner_id: Option<String>, // The ID of the current task runner, may be None
     pub retry_strategy: Retry, // Retry strategy for handling failures
     pub retry_interval: u32, // Interval for retrying the task
-    pub base_interval: u32, // Base interval for exponential backoff
+    pub base_interval: u32,  // Base interval for exponential backoff
     pub delay_seconds: u32,  //Delay before executing a Once task, specified in seconds
     pub max_retries: Option<u32>, // Maximum number of retries allowed
     pub cron_schedule: Option<String>, // Cron expression for scheduling
