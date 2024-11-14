@@ -81,7 +81,7 @@ where
     }
 
     /// Starts a signal listener to handle shutdown signals.
-    pub fn start_signal_listener(&self) {
+    fn start_signal_listener(&self) {
         let shutdown = self.shutdown.clone(); // Clone the shutdown flag
         tokio::spawn(async move {
             match signal::ctrl_c().await {
@@ -107,15 +107,16 @@ where
     }
 
     /// Adds a new task to the context for execution.
-    pub async fn add_task<T>(&self, task: T) -> Result<(), String>
+    pub async fn add_task<T>(&self, task: T, delay_seconds: Option<u32>) -> Result<(), String>
     where
         T: Task + Send + Sync + 'static, // T must implement the Task trait and be thread-safe
     {
         let mut task_meta = task.new_meta(); // Create metadata for the new task
         let next_run = match T::TASK_KIND {
             TaskKind::Once | TaskKind::Repeat => {
-                utc_now!() + (task_meta.delay_seconds * 1000) as i64
-            } // Set next run time to now for once or repeat tasks
+                let delay_seconds = delay_seconds.unwrap_or(task_meta.delay_seconds) * 1000;
+                utc_now!() + delay_seconds as i64
+            } // Set the next run time by adding a delay to the current time, allowing the task to run at a specified future time.
             TaskKind::Cron => {
                 let schedule = T::SCHEDULE
                     .ok_or_else(|| "Cron schedule is required for TaskKind::Cron".to_string())?; // Ensure a cron schedule is provided
@@ -130,8 +131,8 @@ where
             }
         };
 
-        task_meta.next_run = next_run; // Set the next run time in the task metadata
-        task_meta.last_run = next_run; // Set the last run time in the task metadata
+        task_meta.next_run = next_run;
+        task_meta.last_run = next_run;
         self.store
             .store_task(task_meta) // Store the task metadata in the task store
             .await

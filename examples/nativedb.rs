@@ -26,12 +26,12 @@ async fn main() {
         .start();
 
     context
-        .add_task(MyTask1::new("name1".to_string(), 32))
+        .add_task(MyTask1::new("name1".to_string(), 32), None)
         .await
         .unwrap();
 
     context
-        .add_task(MyTask2::new("namexxxxxxx".to_string(), 3900))
+        .add_task(MyTask2::new("namexxxxxxx".to_string(), 3900), None)
         .await
         .unwrap();
 
