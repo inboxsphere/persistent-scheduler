@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use persistent_scheduler::core::{
-    context::TaskContext,
+    context::{TaskAndDelay, TaskContext},
     store::InMemoryTaskStore,
     task::{Task, TaskFuture},
     task_kind::TaskKind,
@@ -18,17 +18,19 @@ async fn main() {
     let context = TaskContext::new(task_store)
         .register::<MyTask1>()
         .register::<MyTask2>()
+        .set_concurrency("default", 10)
         .start();
+    let mut tasks = Vec::new();
+    for _ in 0..100000 {
+        tasks.push(TaskAndDelay {
+            inner: MyTask1::new("name1".to_string(), 32),
+            delay_seconds: None,
+        });
+    }
 
-    context
-        .add_task(MyTask1::new("name1".to_string(), 32), None)
-        .await
-        .unwrap();
-
-    context
-        .add_task(MyTask2::new("name2".to_string(), 39), None)
-        .await
-        .unwrap();
+    tokio::spawn(async move {
+        context.add_tasks(tasks).await.unwrap();
+    });
 
     tokio::time::sleep(Duration::from_secs(100000000)).await;
 }
@@ -55,11 +57,11 @@ impl Task for MyTask1 {
 
     fn run(self) -> TaskFuture {
         Box::pin(async move {
-            println!("{}", self.name);
-            println!("{}", self.age);
+            // println!("{}", self.name);
+            // println!("{}", self.age);
 
-            println!("my task1 is running");
-            Err("return error".to_string())
+            // println!("my task1 is running");
+            Ok(())
         })
     }
 }

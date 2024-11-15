@@ -29,7 +29,7 @@ where
     pub fn new(task_store: Arc<T>) -> Self {
         Self {
             task_store: task_store.clone(),
-            periodic_task: Arc::new(PeriodicTask::new("task cleaner")),
+            periodic_task: Arc::new(PeriodicTask::new("task-cleaner")),
         }
     }
 

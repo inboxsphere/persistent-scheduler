@@ -1,8 +1,8 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use persistent_scheduler::{
     core::{
-        context::TaskContext,
+        context::{TaskAndDelay, TaskContext},
         store::TaskStore,
         task::{Task, TaskFuture},
         task_kind::TaskKind,
@@ -24,17 +24,25 @@ async fn main() {
         .register::<MyTask2>()
         .set_concurrency("default", 10)
         .start();
+    let context = Arc::new(context);
+    let mut tasks = Vec::new();
 
-    context
-        .add_task(MyTask1::new("name1".to_string(), 32), None)
-        .await
-        .unwrap();
+    for _ in 0..10000 {
+        tasks.push(TaskAndDelay {
+            inner: MyTask1::new("name1".to_string(), 32),
+            delay_seconds: None,
+        });
+    }
 
-    context
-        .add_task(MyTask2::new("namexxxxxxx".to_string(), 3900), None)
-        .await
-        .unwrap();
+    tokio::spawn(async move {
+        context.add_tasks(tasks).await.unwrap();
+    });
 
+    // context
+    //     .add_task(MyTask2::new("namexxxxxxx".to_string(), 3900), None)
+    //     .await
+    //     .unwrap();
+    println!("添加结束了.");
     tokio::time::sleep(Duration::from_secs(100000000)).await;
 }
 
@@ -57,14 +65,14 @@ impl Task for MyTask1 {
 
     const TASK_KIND: TaskKind = TaskKind::Once;
     //const RETRY_POLICY: RetryPolicy = RetryPolicy::linear(10, Some(5));
-
+    const DELAY_SECONDS: u32 = 0;
     fn run(self) -> TaskFuture {
         Box::pin(async move {
-            println!("{}", self.name);
-            println!("{}", self.age);
+            // println!("{}", self.name);
+            // println!("{}", self.age);
 
-            println!("my task1 is running");
-            Err("return error".to_string())
+            //println!("my task1 is running");
+            Ok(())
         })
     }
 }

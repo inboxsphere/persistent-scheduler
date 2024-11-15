@@ -59,6 +59,17 @@ pub trait TaskStore: Clone + Send {
     /// Returns `Ok(())` if the task is successfully stored; returns an error if the task ID already exists.
     async fn store_task(&self, task: TaskMeta) -> Result<(), Self::Error>;
 
+    /// Stores tasks metadata.
+    ///
+    /// # Arguments
+    ///
+    /// * `tasks`: The task metadata to be stored.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the tasks is successfully stored; returns an error if any task ID already exists.
+    async fn store_tasks(&self, tasks: Vec<TaskMeta>) -> Result<(), Self::Error>;
+
     /// Fetches a pending task based on the queue name and runner ID.
     ///
     /// # Arguments
@@ -194,6 +205,17 @@ impl TaskStore for InMemoryTaskStore {
             return Err(InMemoryTaskStoreError::TaskIdConflict(task.id.clone()));
         }
         tasks.insert(task.id.clone(), task);
+        Ok(())
+    }
+
+    async fn store_tasks(&self, tasks: Vec<TaskMeta>) -> Result<(), Self::Error> {
+        let mut w_tasks = self.tasks.write().await;
+        for task in tasks {
+            if w_tasks.contains_key(&task.id) {
+                return Err(InMemoryTaskStoreError::TaskIdConflict(task.id.clone()));
+            }
+            w_tasks.insert(task.id.clone(), task);
+        }
         Ok(())
     }
 

@@ -28,6 +28,9 @@ pub enum NativeDbTaskStoreError {
 
     #[error("NativeDb error: {0:#?}")]
     NativeDb(#[from] native_db::db_type::Error),
+
+    #[error("{0:#?}")]
+    Tokio(#[from] tokio::task::JoinError),
 }
 
 #[derive(Clone)]
@@ -58,22 +61,171 @@ impl NativeDbTaskStore {
             store: Arc::new(database),
         }
     }
-}
 
-fn handle_error<T>(
-    result: Result<T, native_db::db_type::Error>,
-) -> Result<T, NativeDbTaskStoreError> {
-    result.map_err(NativeDbTaskStoreError::from)
-}
+    pub fn fetch_and_lock_task(
+        db: Arc<&'static Database<'static>>,
+        queue: String,
+        runner_id: String,
+    ) -> Result<Option<TaskMeta>, NativeDbTaskStoreError> {
+        // Start the read transaction
+        let r = db.r_transaction()?;
+        let scan = r
+            .scan()
+            .secondary::<TaskMetaEntity>(TaskMetaEntityKey::queue_name)?;
 
-#[async_trait]
-impl TaskStore for NativeDbTaskStore {
-    type Error = NativeDbTaskStoreError;
+        // Start scanning for tasks in the given queue
+        let mut iter = scan.start_with(queue)?;
 
-    async fn restore_tasks(&self) -> Result<(), Self::Error> {
-        let rw = handle_error(self.store.rw_transaction())?;
-        let entities: Vec<TaskMetaEntity> =
-            handle_error(rw.scan().primary()?.all()?.try_collect())?;
+        // Find the first task that meets the candidate criteria and is due to run
+        if let Some(task) = iter
+            .find(|item| {
+                item.as_ref().is_ok_and(|e| {
+                    is_candidate_task(&e.kind, &e.status) && e.next_run <= utc_now!()
+                })
+            })
+            .transpose()?
+        {
+            // Start a read-write transaction to update the task's status
+            let rw = db.rw_transaction()?;
+            let current = rw.get().primary::<TaskMetaEntity>(task.id)?;
+
+            match current {
+                Some(mut current) => {
+                    // If the task is still a candidate and ready to run, update it
+                    if is_candidate_task(&current.kind, &current.status)
+                        && current.next_run <= utc_now!()
+                    {
+                        let old = current.clone();
+                        current.runner_id = Some(runner_id);
+                        current.status = TaskStatus::Running;
+                        current.updated_at = utc_now!();
+
+                        // Perform the update in the same transaction
+                        rw.update(old.clone(), current.clone())?;
+                        rw.commit()?;
+
+                        Ok(Some(old.into()))
+                    } else {
+                        // Task status is not valid, return None
+                        Ok(None)
+                    }
+                }
+                None => {
+                    // Task not found, return None
+                    Ok(None)
+                }
+            }
+        } else {
+            // No task found, return None
+            Ok(None)
+        }
+    }
+
+    fn update_status(
+        db: Arc<&'static Database<'static>>,
+        task_id: String,
+        is_success: bool,
+        last_error: Option<String>,
+        next_run: Option<i64>,
+    ) -> Result<(), NativeDbTaskStoreError> {
+        let rw = db.rw_transaction()?;
+        let task = rw.get().primary::<TaskMetaEntity>(task_id)?;
+
+        let task = match task {
+            Some(t) => t,
+            None => return Err(NativeDbTaskStoreError::TaskNotFound),
+        };
+
+        if task.status == TaskStatus::Stopped || task.status == TaskStatus::Removed {
+            return Ok(());
+        }
+
+        let mut updated_task = task.clone();
+        if is_success {
+            updated_task.success_count += 1;
+            updated_task.status = TaskStatus::Success;
+        } else {
+            updated_task.failure_count += 1;
+            updated_task.status = TaskStatus::Failed;
+            updated_task.last_error = last_error;
+        }
+
+        if let Some(next_run_time) = next_run {
+            updated_task.last_run = updated_task.next_run;
+            updated_task.next_run = next_run_time;
+        }
+
+        updated_task.updated_at = utc_now!();
+
+        rw.update(task, updated_task)?;
+        rw.commit()?;
+
+        Ok(())
+    }
+
+    pub fn clean_up(db: Arc<&'static Database<'static>>) -> Result<(), NativeDbTaskStoreError> {
+        let rw = db.rw_transaction()?;
+        let entities: Vec<TaskMetaEntity> = rw
+            .scan()
+            .secondary(TaskMetaEntityKey::status)?
+            .start_with(TaskStatus::Removed.to_string().as_str())?
+            .try_collect()?;
+        for entity in entities {
+            rw.remove(entity)?;
+        }
+        rw.commit()?;
+        Ok(())
+    }
+
+    pub fn set_status(
+        db: Arc<&'static Database<'static>>,
+        task_id: String,
+        status: TaskStatus,
+    ) -> Result<(), NativeDbTaskStoreError> {
+        assert!(matches!(status, TaskStatus::Removed | TaskStatus::Stopped));
+
+        let rw = db.rw_transaction()?;
+        let task = rw.get().primary::<TaskMetaEntity>(task_id)?;
+
+        if let Some(mut task) = task {
+            let old = task.clone();
+            task.status = TaskStatus::Removed;
+            task.updated_at = utc_now!();
+            rw.update(old, task)?;
+            rw.commit()?;
+            Ok(())
+        } else {
+            Err(NativeDbTaskStoreError::TaskNotFound)
+        }
+    }
+
+    pub fn heartbeat(
+        db: Arc<&'static Database<'static>>,
+        task_id: String,
+        runner_id: String,
+    ) -> Result<(), NativeDbTaskStoreError> {
+        let rw = db.rw_transaction()?;
+        let task = rw.get().primary::<TaskMetaEntity>(task_id)?;
+
+        if let Some(mut task) = task {
+            let old = task.clone();
+            task.heartbeat_at = utc_now!();
+            task.runner_id = Some(runner_id.to_string());
+            rw.update(old, task)?;
+            rw.commit()?;
+            Ok(())
+        } else {
+            Err(NativeDbTaskStoreError::TaskNotFound)
+        }
+    }
+
+    pub fn restore(db: Arc<&'static Database<'static>>) -> Result<(), NativeDbTaskStoreError> {
+        let rw = db.rw_transaction()?;
+        let entities: Vec<TaskMetaEntity> = rw
+            .scan()
+            .primary::<TaskMetaEntity>()?
+            .all()?
+            .try_collect()?;
 
         // Exclude stopped and Removed tasks
         let targets: Vec<TaskMetaEntity> = entities
@@ -95,7 +247,7 @@ impl TaskStore for NativeDbTaskStore {
             }
 
             // Handle potential error without using `?` in a map
-            handle_error(rw.update(entity.clone(), updated_entity))?;
+            rw.update(entity.clone(), updated_entity)?;
         }
 
         // Handle next run time for repeatable tasks
@@ -137,30 +289,82 @@ impl TaskStore for NativeDbTaskStore {
                 _ => {}
             }
 
-            handle_error(rw.update(entity.clone(), updated))?;
+            rw.update(entity.clone(), updated)?;
         }
 
-        handle_error(rw.commit())?;
+        rw.commit()?;
         Ok(())
     }
 
-    async fn get(&self, task_id: &str) -> Result<Option<TaskMeta>, Self::Error> {
-        let r = handle_error(self.store.r_transaction())?;
-        Ok(handle_error(r.get().primary(task_id))?.map(|e: TaskMetaEntity| e.into()))
+    pub fn get(
+        db: Arc<&'static Database<'static>>,
+        task_id: String,
+    ) -> Result<Option<TaskMeta>, NativeDbTaskStoreError> {
+        let r = db.r_transaction()?;
+        Ok(r.get().primary(task_id)?.map(|e: TaskMetaEntity| e.into()))
     }
 
-    async fn list(&self) -> Result<Vec<TaskMeta>, Self::Error> {
-        let r = handle_error(self.store.r_transaction())?;
-        let list: Vec<TaskMetaEntity> = handle_error(r.scan().primary()?.all()?.try_collect())?;
+    pub fn list(
+        db: Arc<&'static Database<'static>>,
+    ) -> Result<Vec<TaskMeta>, NativeDbTaskStoreError> {
+        let r = db.r_transaction()?;
+        let list: Vec<TaskMetaEntity> = r.scan().primary()?.all()?.try_collect()?;
         Ok(list.into_iter().map(|e| e.into()).collect())
     }
 
-    async fn store_task(&self, task: TaskMeta) -> Result<(), Self::Error> {
-        let rw = handle_error(self.store.rw_transaction())?;
+    pub fn store_one(
+        db: Arc<&'static Database<'static>>,
+        task: TaskMeta,
+    ) -> Result<(), NativeDbTaskStoreError> {
+        let rw = db.rw_transaction()?;
         let entity: TaskMetaEntity = task.into();
-        handle_error(rw.insert(entity))?;
-        handle_error(rw.commit())?;
+        rw.insert(entity)?;
+        rw.commit()?;
         Ok(())
+    }
+
+    pub fn store_many(
+        db: Arc<&'static Database<'static>>,
+        tasks: Vec<TaskMeta>,
+    ) -> Result<(), NativeDbTaskStoreError> {
+        let rw = db.rw_transaction()?;
+        for task in tasks {
+            let entity: TaskMetaEntity = task.into();
+            rw.insert(entity)?;
+        }
+        rw.commit()?;
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl TaskStore for NativeDbTaskStore {
+    type Error = NativeDbTaskStoreError;
+
+    async fn restore_tasks(&self) -> Result<(), Self::Error> {
+        let db = self.store.clone();
+        tokio::task::spawn_blocking(move || Self::restore(db)).await?
+    }
+
+    async fn get(&self, task_id: &str) -> Result<Option<TaskMeta>, Self::Error> {
+        let db = self.store.clone();
+        let task_id = task_id.to_string();
+        tokio::task::spawn_blocking(move || Self::get(db, task_id)).await?
+    }
+
+    async fn list(&self) -> Result<Vec<TaskMeta>, Self::Error> {
+        let db = self.store.clone();
+        tokio::task::spawn_blocking(move || Self::list(db)).await?
+    }
+
+    async fn store_task(&self, task: TaskMeta) -> Result<(), Self::Error> {
+        let db = self.store.clone();
+        tokio::task::spawn_blocking(move || Self::store_one(db, task)).await?
+    }
+
+    async fn store_tasks(&self, tasks: Vec<TaskMeta>) -> Result<(), Self::Error> {
+        let db = self.store.clone();
+        tokio::task::spawn_blocking(move || Self::store_many(db, tasks)).await?
     }
 
     async fn fetch_pending_task(
@@ -168,31 +372,10 @@ impl TaskStore for NativeDbTaskStore {
         queue: &str,
         runner_id: &str,
     ) -> Result<Option<TaskMeta>, Self::Error> {
-        let rw = handle_error(self.store.rw_transaction())?;
-        let entities: Vec<TaskMetaEntity> = handle_error(
-            rw.scan()
-                .secondary(TaskMetaEntityKey::queue_name)?
-                .start_with(queue)?
-                .try_collect(),
-        )?;
-
-        if let Some(mut task) = entities
-            .into_iter()
-            .filter(|e: &TaskMetaEntity| is_candidate_task(&e.kind, &e.status))
-            .find(|e| e.next_run <= utc_now!())
-        {
-            let result = task.clone();
-            task.runner_id = Some(runner_id.to_string());
-            task.status = TaskStatus::Running;
-            task.updated_at = utc_now!();
-
-            handle_error(rw.update(result.clone(), task))?;
-            handle_error(rw.commit())?;
-
-            Ok(Some(result.into()))
-        } else {
-            Ok(None)
-        }
+        let queue = queue.to_string();
+        let runner_id = runner_id.to_string();
+        let db = self.store.clone();
+        tokio::task::spawn_blocking(move || Self::fetch_and_lock_task(db, queue, runner_id)).await?
     }
 
     async fn update_task_execution_status(
@@ -202,101 +385,39 @@ impl TaskStore for NativeDbTaskStore {
         last_error: Option<String>,
         next_run: Option<i64>,
     ) -> Result<(), Self::Error> {
-        let rw = handle_error(self.store.rw_transaction())?;
-        let task: Option<TaskMetaEntity> = handle_error(rw.get().primary(task_id))?;
-
-        let task = match task {
-            Some(t) => t,
-            None => return Err(NativeDbTaskStoreError::TaskNotFound),
-        };
-
-        if task.status == TaskStatus::Stopped || task.status == TaskStatus::Removed {
-            return Ok(());
-        }
-
-        let mut updated_task = task.clone();
-        if is_success {
-            updated_task.success_count += 1;
-            updated_task.status = TaskStatus::Success;
-        } else {
-            updated_task.failure_count += 1;
-            updated_task.status = TaskStatus::Failed;
-            updated_task.last_error = last_error;
-        }
-
-        if let Some(next_run_time) = next_run {
-            updated_task.last_run = updated_task.next_run;
-            updated_task.next_run = next_run_time;
-        }
-
-        updated_task.updated_at = utc_now!();
-
-        handle_error(rw.update(task, updated_task))?;
-        handle_error(rw.commit())?;
-
-        Ok(())
+        let db = self.store.clone();
+        let task_id = task_id.to_string();
+        tokio::task::spawn_blocking(move || {
+            Self::update_status(db, task_id, is_success, last_error, next_run)
+        })
+        .await?
     }
 
     async fn heartbeat(&self, task_id: &str, runner_id: &str) -> Result<(), Self::Error> {
-        let rw = handle_error(self.store.rw_transaction())?;
-        let task: Option<TaskMetaEntity> = handle_error(rw.get().primary(task_id))?;
-
-        if let Some(mut task) = task {
-            let old = task.clone();
-            task.heartbeat_at = utc_now!();
-            task.runner_id = Some(runner_id.to_string());
-            handle_error(rw.update(old, task))?;
-            handle_error(rw.commit())?;
-            Ok(())
-        } else {
-            Err(NativeDbTaskStoreError::TaskNotFound)
-        }
+        let db = self.store.clone();
+        let task_id = task_id.to_string();
+        let runner_id = runner_id.to_string();
+        tokio::task::spawn_blocking(move || Self::heartbeat(db, task_id, runner_id)).await?
     }
 
     async fn set_task_stopped(&self, task_id: &str) -> Result<(), Self::Error> {
-        let rw = handle_error(self.store.rw_transaction())?;
-        let task: Option<TaskMetaEntity> = handle_error(rw.get().primary(task_id))?;
+        let db = self.store.clone();
+        let task_id = task_id.to_string();
 
-        if let Some(mut task) = task {
-            let old = task.clone();
-            task.status = TaskStatus::Stopped;
-            task.updated_at = utc_now!();
-            handle_error(rw.update(old, task))?;
-            handle_error(rw.commit())?;
-            Ok(())
-        } else {
-            Err(NativeDbTaskStoreError::TaskNotFound)
-        }
+        tokio::task::spawn_blocking(move || Self::set_status(db, task_id, TaskStatus::Stopped))
+            .await?
     }
 
     async fn set_task_removed(&self, task_id: &str) -> Result<(), Self::Error> {
-        let rw = handle_error(self.store.rw_transaction())?;
-        let task: Option<TaskMetaEntity> = handle_error(rw.get().primary(task_id))?;
+        let db = self.store.clone();
+        let task_id = task_id.to_string();
 
-        if let Some(mut task) = task {
-            let old = task.clone();
-            task.status = TaskStatus::Removed;
-            task.updated_at = utc_now!();
-            handle_error(rw.update(old, task))?;
-            handle_error(rw.commit())?;
-            Ok(())
-        } else {
-            Err(NativeDbTaskStoreError::TaskNotFound)
-        }
+        tokio::task::spawn_blocking(move || Self::set_status(db, task_id, TaskStatus::Removed))
+            .await?
     }
 
     async fn cleanup(&self) -> Result<(), Self::Error> {
-        let rw = handle_error(self.store.rw_transaction())?;
-        let entities: Vec<TaskMetaEntity> = handle_error(
-            rw.scan()
-                .secondary(TaskMetaEntityKey::status)?
-                .start_with(TaskStatus::Removed.to_string().as_str())?
-                .try_collect(),
-        )?;
-        for entity in entities {
-            handle_error(rw.remove(entity))?;
-        }
-        handle_error(rw.commit())?;
-        Ok(())
+        let db = self.store.clone();
+        tokio::task::spawn_blocking(move || Self::clean_up(db)).await?
     }
 }
