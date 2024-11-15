@@ -6,8 +6,9 @@ use crate::core::task::Task;
 use crate::core::task_kind::TaskKind;
 use crate::core::worker::process_task_worker;
 use crate::utc_now;
+use ahash::AHashMap;
+use std::sync::Arc;
 use std::time::Duration;
-use std::{collections::HashMap, sync::Arc};
 use tokio::signal;
 use tokio::sync::RwLock;
 
@@ -17,7 +18,7 @@ pub struct TaskContext<S>
 where
     S: TaskStore, // Ensures that S is a type that implements the TaskStore trait
 {
-    queue_concurrency: HashMap<String, u32>, // Stores the concurrency level for each task queue
+    queue_concurrency: AHashMap<String, u32>, // Stores the concurrency level for each task queue
     handlers: TaskHandlers, // Collection of task handlers to process different task types
     shutdown: Arc<RwLock<bool>>, // Shared state to control the shutdown of the system
     store: Arc<S>, // Arc wrapper around the task store, allowing shared ownership across threads
@@ -30,9 +31,9 @@ where
     /// Creates a new TaskContext with the provided store.
     pub fn new(store: S) -> Self {
         Self {
-            queue_concurrency: HashMap::new(), // Initialize concurrency map as empty
-            handlers: TaskHandlers::new(),     // Create a new TaskHandlers instance
-            store: Arc::new(store),            // Wrap the store in an Arc for shared ownership
+            queue_concurrency: AHashMap::new(), // Initialize concurrency map as empty
+            handlers: TaskHandlers::new(),      // Create a new TaskHandlers instance
+            store: Arc::new(store),             // Wrap the store in an Arc for shared ownership
             shutdown: Arc::new(RwLock::new(false)), // Initialize shutdown state to false
         }
     }

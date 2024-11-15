@@ -2,8 +2,9 @@ use crate::core::error::SchedulerError;
 use crate::core::model::TaskMeta;
 use crate::core::result::TaskResult;
 use crate::core::task::Task;
+use ahash::AHashMap;
 use std::time::{Duration, Instant};
-use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc};
+use std::{future::Future, pin::Pin, sync::Arc};
 use tracing::{error, info, warn};
 
 // Type alias for a task handler that takes `Value` as input
@@ -17,14 +18,14 @@ pub type Handler = Arc<
 #[derive(Clone)]
 pub struct TaskHandlers {
     // A hashmap to store task handlers, mapping task keys to their corresponding handlers.
-    handlers: HashMap<String, Handler>,
+    handlers: AHashMap<String, Handler>,
 }
 
 impl TaskHandlers {
     /// Creates a new `TaskHandlers` container, initializing an empty handler map.
     pub fn new() -> Self {
         Self {
-            handlers: HashMap::new(),
+            handlers: AHashMap::new(),
         }
     }
 

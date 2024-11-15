@@ -3,8 +3,9 @@ use crate::{
     core::model::{TaskMeta, TaskStatus},
     utc_now,
 };
+use ahash::AHashMap;
 use async_trait::async_trait;
-use std::{collections::HashMap, error::Error, sync::Arc};
+use std::{error::Error, sync::Arc};
 use thiserror::Error;
 use tokio::sync::RwLock;
 
@@ -158,14 +159,14 @@ pub enum InMemoryTaskStoreError {
 
 #[derive(Clone, Default)]
 pub struct InMemoryTaskStore {
-    tasks: Arc<RwLock<HashMap<String, TaskMeta>>>,
+    tasks: Arc<RwLock<AHashMap<String, TaskMeta>>>,
 }
 
 impl InMemoryTaskStore {
     /// Creates a new instance of `InMemoryTaskStore`.
     pub fn new() -> Self {
         Self {
-            tasks: Arc::new(RwLock::new(HashMap::new())),
+            tasks: Arc::new(RwLock::new(AHashMap::new())),
         }
     }
 }
