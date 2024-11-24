@@ -13,7 +13,9 @@ use async_trait::async_trait;
 use itertools::Itertools;
 use native_db::Database;
 use std::sync::Arc;
+use std::time::Instant;
 use thiserror::Error;
+use tracing::debug;
 
 #[derive(Error, Debug)]
 pub enum NativeDbTaskStoreError {
@@ -121,6 +123,39 @@ impl NativeDbTaskStore {
         }
     }
 
+    pub fn fetch_pending_tasks(
+        db: Arc<&'static Database<'static>>,
+    ) -> Result<Vec<TaskMeta>, NativeDbTaskStoreError> {
+        let start = Instant::now();
+        let r = db.r_transaction()?;
+        let scan = r
+            .scan()
+            .secondary::<TaskMetaEntity>(TaskMetaEntityKey::candidate_task)?;
+
+        let iter = scan.start_with(true.to_string())?;
+        let tasks: Vec<TaskMetaEntity> = iter
+            .filter_map(|item| item.ok().filter(|e| e.next_run <= utc_now!()))
+            .take(200)
+            .collect();
+
+        let rw = db.rw_transaction()?;
+        let mut result = Vec::new();
+        for entity in tasks.into_iter() {
+            let mut updated = entity.clone();
+            updated.status = TaskStatus::Running;
+            updated.updated_at = utc_now!();
+            rw.update(entity.clone(), updated)?;
+            result.push(entity.into());
+        }
+        rw.commit()?;
+        debug!(
+            "Time taken to fetch task from native_db: {:#?}",
+            start.elapsed()
+        );
+
+        Ok(result)
+    }
+
     fn update_status(
         db: Arc<&'static Database<'static>>,
         task_id: String,
@@ -167,11 +202,13 @@ impl NativeDbTaskStore {
         let rw = db.rw_transaction()?;
         let entities: Vec<TaskMetaEntity> = rw
             .scan()
-            .secondary(TaskMetaEntityKey::status)?
-            .start_with(TaskStatus::Removed.to_string().as_str())?
+            .secondary(TaskMetaEntityKey::clean_up)?
+            .start_with(true.to_string())?
             .try_collect()?;
         for entity in entities {
-            rw.remove(entity)?;
+            if (utc_now!() - entity.updated_at) > 30 * 60 * 1000 {
+                rw.remove(entity)?;
+            }
         }
         rw.commit()?;
         Ok(())
@@ -220,6 +257,7 @@ impl NativeDbTaskStore {
     }
 
     pub fn restore(db: Arc<&'static Database<'static>>) -> Result<(), NativeDbTaskStoreError> {
+        tracing::info!("starting task restore...");
         let rw = db.rw_transaction()?;
         let entities: Vec<TaskMetaEntity> = rw
             .scan()
@@ -293,6 +331,7 @@ impl NativeDbTaskStore {
         }
 
         rw.commit()?;
+        tracing::info!("finished task restore.");
         Ok(())
     }
 
@@ -367,15 +406,9 @@ impl TaskStore for NativeDbTaskStore {
         tokio::task::spawn_blocking(move || Self::store_many(db, tasks)).await?
     }
 
-    async fn fetch_pending_task(
-        &self,
-        queue: &str,
-        runner_id: &str,
-    ) -> Result<Option<TaskMeta>, Self::Error> {
-        let queue = queue.to_string();
-        let runner_id = runner_id.to_string();
+    async fn fetch_pending_tasks(&self) -> Result<Vec<TaskMeta>, Self::Error> {
         let db = self.store.clone();
-        tokio::task::spawn_blocking(move || Self::fetch_and_lock_task(db, queue, runner_id)).await?
+        tokio::task::spawn_blocking(move || Self::fetch_pending_tasks(db)).await?
     }
 
     async fn update_task_execution_status(

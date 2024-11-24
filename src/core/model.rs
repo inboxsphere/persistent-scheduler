@@ -38,9 +38,10 @@ pub struct TaskMeta {
     pub heartbeat_at: i64,              // Timestamp of the last heartbeat in milliseconds
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Debug, Eq, Default, PartialEq, Serialize, Deserialize, Hash)]
 pub enum TaskStatus {
     // Task has been scheduled but has not started executing yet.
+    #[default]
     Scheduled,
 
     // Task is currently running.
@@ -73,8 +74,9 @@ impl fmt::Display for TaskStatus {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Retry {
+    #[default]
     Linear,
     Exponential,
 }

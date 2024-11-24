@@ -71,21 +71,18 @@ pub trait TaskStore: Clone + Send {
     /// Returns `Ok(())` if the tasks is successfully stored; returns an error if any task ID already exists.
     async fn store_tasks(&self, tasks: Vec<TaskMeta>) -> Result<(), Self::Error>;
 
-    /// Fetches a pending task based on the queue name and runner ID.
-    ///
-    /// # Arguments
-    ///
-    /// * `queue`: The name of the queue the task belongs to.
-    /// * `runner_id`: The ID of the runner that will execute the task.
+    /// Fetches all pending tasks from the store.
     ///
     /// # Returns
     ///
-    /// Returns an `Option<TaskMetaEntity>`. If a suitable task is found and updated, it returns `Some(TaskMetaEntity)`, otherwise it returns `None`.
-    async fn fetch_pending_task(
-        &self,
-        queue: &str,
-        runner_id: &str,
-    ) -> Result<Option<TaskMeta>, Self::Error>;
+    /// Returns a `Result` containing a `Vec<TaskMeta>` if successful, or an error of type `Self::Error` if fetching tasks fails.
+    ///
+    /// The returned `Vec<TaskMeta>` contains all tasks that are currently in a pending state, ready for processing.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error of type `Self::Error` if there is an issue querying the task store.
+    async fn fetch_pending_tasks(&self) -> Result<Vec<TaskMeta>, Self::Error>;
 
     /// Updates the execution status of a task.
     ///
@@ -220,25 +217,18 @@ impl TaskStore for InMemoryTaskStore {
         Ok(())
     }
 
-    async fn fetch_pending_task(
-        &self,
-        queue: &str,
-        runner_id: &str,
-    ) -> Result<Option<TaskMeta>, Self::Error> {
+    async fn fetch_pending_tasks(&self) -> Result<Vec<TaskMeta>, Self::Error> {
         let mut tasks = self.tasks.write().await;
+        let mut result = Vec::new();
         for task in tasks.values_mut() {
-            if task.queue_name == queue
-                && is_candidate_task(&task.kind, &task.status)
-                && task.next_run <= utc_now!()
-            {
-                let result = task.clone();
-                task.runner_id = Some(runner_id.to_string());
+            if is_candidate_task(&task.kind, &task.status) && task.next_run <= utc_now!() {
+                let t = task.clone();
                 task.status = TaskStatus::Running;
                 task.updated_at = utc_now!();
-                return Ok(Some(result));
+                result.push(t);
             }
         }
-        Ok(None)
+        Ok(result)
     }
 
     async fn update_task_execution_status(

@@ -23,7 +23,7 @@ async fn main() {
         .register::<MyTask1>()
         .register::<MyTask2>()
         .set_concurrency("default", 10)
-        .start();
+        .start().await;
     let context = Arc::new(context);
     let mut tasks = Vec::new();
 
@@ -38,12 +38,7 @@ async fn main() {
         context.add_tasks(tasks).await.unwrap();
     });
 
-    // context
-    //     .add_task(MyTask2::new("namexxxxxxx".to_string(), 3900), None)
-    //     .await
-    //     .unwrap();
-    println!("添加结束了.");
-    tokio::time::sleep(Duration::from_secs(100000000)).await;
+    tokio::time::sleep(Duration::from_secs(10000)).await;
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

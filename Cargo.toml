@@ -1,11 +1,11 @@
 [package]
 name = "persistent-scheduler"
-version = "0.1.12"
+version = "0.2.0"
 author = "Pedro Rocha"
 edition = "2021"
 description = "A high-performance task scheduling system developed in Rust using Tokio. This system supports task persistence, repeatable tasks, Cron-based scheduling, and one-time tasks, ensuring reliability and flexibility for managing time-based operations in various applications."
 license-file = "LICENSE"
-documentation = "https://docs.rs/persistent-scheduler/0.1.12/"
+documentation = "https://docs.rs/persistent-scheduler/0.2.0/"
 repository = "https://github.com/inboxsphere/persistent-scheduler"
 
 [features]
@@ -17,10 +17,10 @@ nativedb = ["native_db", "native_model", "once_cell", "itertools", "sysinfo"]
 serde = { version = "1.0.215", features = ["derive"] }
 thiserror = "2.0.3"
 tokio = { version = "1.41.1", features = ["full"] }
-croner = "2.0.6"
+croner = "2.1.0"
 chrono = "0.4.38"
 chrono-tz = "0.10.0"
-serde_json = "1.0.132"
+serde_json = "1.0.133"
 ulid = "1.1.2"
 tracing = "0.1.40"
 async-trait = "0.1.83"

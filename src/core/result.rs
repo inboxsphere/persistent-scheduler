@@ -1,5 +1,6 @@
 use crate::core::error::SchedulerError;
 
+#[derive(Debug)]
 pub struct TaskResult {
     pub task_id: String,
     pub result: Result<(), SchedulerError>,

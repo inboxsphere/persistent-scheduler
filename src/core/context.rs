@@ -1,40 +1,38 @@
 use crate::core::cleaner::TaskCleaner;
 use crate::core::cron::next_run;
 use crate::core::handlers::TaskHandlers;
+use crate::core::model::TaskMeta;
+use crate::core::status_updater::TaskStatusUpdater;
 use crate::core::store::TaskStore;
 use crate::core::task::Task;
 use crate::core::task_kind::TaskKind;
-use crate::core::worker::process_task_worker;
 use crate::utc_now;
 use ahash::AHashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::signal;
-use tokio::sync::RwLock;
 
-use super::model::TaskMeta;
+use super::flow::TaskFlow;
 
 pub struct TaskContext<S>
 where
-    S: TaskStore, // Ensures that S is a type that implements the TaskStore trait
+    S: TaskStore + Send + Sync + Clone + 'static, // Ensures that S is a type that implements the TaskStore trait
 {
-    queue_concurrency: AHashMap<String, u32>, // Stores the concurrency level for each task queue
+    queue_concurrency: AHashMap<String, usize>, // Stores the concurrency level for each task queue
     handlers: TaskHandlers, // Collection of task handlers to process different task types
-    shutdown: Arc<RwLock<bool>>, // Shared state to control the shutdown of the system
     store: Arc<S>, // Arc wrapper around the task store, allowing shared ownership across threads
 }
 
 impl<S> TaskContext<S>
 where
-    S: TaskStore + Sync + Send + 'static, // S must implement TaskStore, and be Sync and Send
+    S: TaskStore + Send + Sync + Clone + 'static, // S must implement TaskStore, and be Sync and Send
 {
     /// Creates a new TaskContext with the provided store.
     pub fn new(store: S) -> Self {
+        let store = Arc::new(store);
         Self {
             queue_concurrency: AHashMap::new(), // Initialize concurrency map as empty
             handlers: TaskHandlers::new(),      // Create a new TaskHandlers instance
-            store: Arc::new(store),             // Wrap the store in an Arc for shared ownership
-            shutdown: Arc::new(RwLock::new(false)), // Initialize shutdown state to false
+            store: store.clone(),               // Wrap the store in an Arc for shared ownership
         }
     }
 
@@ -49,7 +47,7 @@ where
     }
 
     /// Sets the concurrency level for a specified queue.
-    pub fn set_concurrency(mut self, queue: &str, count: u32) -> Self {
+    pub fn set_concurrency(mut self, queue: &str, count: usize) -> Self {
         self.queue_concurrency.insert(queue.to_owned(), count); // Update the concurrency level for the queue
         self
     }
@@ -61,51 +59,26 @@ where
     }
 
     /// Starts worker threads for processing tasks in each queue.
-    fn start_worker(&self) {
-        let Self {
-            queue_concurrency,
-            handlers,
-            store,
-            shutdown,
-        } = self;
-        // Spawn workers based on the concurrency settings for each queue
-        for (queue, concurrency) in queue_concurrency.iter() {
-            for _ in 0..*concurrency {
-                let handlers = handlers.clone(); // Clone the handlers for the worker
-                let task_store = store.clone(); // Clone the task store for the worker
-                let shutdown = shutdown.clone(); // Clone the shutdown flag for the worker
-                let queue = queue.clone(); // Clone the queue name for the worker
-                tokio::spawn(async move {
-                    process_task_worker(queue.as_str(), handlers, task_store, shutdown).await;
-                    // Start processing tasks in the worker
-                });
-            }
-        }
-    }
+    async fn start_flow(&self) {
+        let status_updater = Arc::new(TaskStatusUpdater::new(
+            self.store.clone(),
+            self.queue_concurrency.len(),
+        ));
 
-    /// Starts a signal listener to handle shutdown signals.
-    fn start_signal_listener(&self) {
-        let shutdown = self.shutdown.clone(); // Clone the shutdown flag
-        tokio::spawn(async move {
-            match signal::ctrl_c().await {
-                Ok(()) => {
-                    println!("Shutdown signal received (Ctrl+C). Terminating all scheduled tasks and shutting down the system...");
-                    let mut triggered = shutdown.write().await; // Acquire write lock to set shutdown state
-                    *triggered = true; // Set the shutdown state to true
-                }
-                Err(err) => {
-                    eprintln!("Error listening for shutdown signal: {:?}", err);
-                    // Log any errors encountered while listening
-                }
-            }
-        });
+        let flow = Arc::new(TaskFlow::new(
+            self.store.clone(),
+            &self.queue_concurrency,
+            Arc::new(self.handlers.clone()),
+            status_updater,
+        ));
+
+        flow.start().await;
     }
 
     /// Starts the task context, including workers and the task cleaner.
-    pub fn start(self) -> Self {
-        self.start_worker(); // Start task workers
+    pub async fn start(self) -> Self {
+        self.start_flow().await; // Start task workers
         self.start_task_cleaner(); // Start the task cleaner
-        self.start_signal_listener(); // Start the signal listener
         self
     }
 

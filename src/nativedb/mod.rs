@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use tracing::error;
 
 pub mod meta;
+#[cfg(test)]
+mod tests;
 
 static DB: OnceCell<Database> = OnceCell::new();
 
@@ -53,9 +55,9 @@ pub fn get_database() -> Result<&'static Database<'static>, SchedulerError> {
     DB.get().ok_or_else(|| SchedulerError::StoreInit)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[native_model(id = 1, version = 1)]
-#[native_db]
+#[native_db(secondary_key(clean_up -> String), secondary_key(candidate_task -> String))]
 pub struct TaskMetaEntity {
     #[primary_key]
     pub id: String, // Unique identifier for the task
@@ -65,8 +67,7 @@ pub struct TaskMetaEntity {
     #[secondary_key]
     pub queue_name: String, // Name of the queue for the task
     pub updated_at: i64,     // Timestamp of the last update
-    #[secondary_key]
-    pub status: TaskStatus, // Current status of the task
+    pub status: TaskStatus,  // Current status of the task
     pub stopped_reason: Option<String>, // Optional reason for why the task was stopped
     pub last_error: Option<String>, // Error message from the last execution, if any
     pub last_run: i64,       // Timestamp of the last run
@@ -87,20 +88,27 @@ pub struct TaskMetaEntity {
     pub heartbeat_at: i64,   // Timestamp of the last heartbeat in milliseconds
 }
 
-impl ToKey for TaskStatus {
-    fn to_key(&self) -> Key {
-        match self {
-            TaskStatus::Scheduled => Key::new(vec![0]),
-            TaskStatus::Running => Key::new(vec![1]),
-            TaskStatus::Success => Key::new(vec![2]),
-            TaskStatus::Failed => Key::new(vec![3]),
-            TaskStatus::Removed => Key::new(vec![4]),
-            TaskStatus::Stopped => Key::new(vec![5]),
-        }
+impl TaskMetaEntity {
+    pub fn clean_up(&self) -> String {
+        let result = match self.kind {
+            TaskKind::Cron | TaskKind::Repeat => matches!(self.status, TaskStatus::Removed),
+            TaskKind::Once => matches!(
+                self.status,
+                TaskStatus::Removed | TaskStatus::Success | TaskStatus::Failed
+            ),
+        };
+        result.to_string()
     }
 
-    fn key_names() -> Vec<String> {
-        vec!["String".to_string(), "&str".to_string()]
+    pub fn candidate_task(&self) -> String {
+        let result = match self.kind {
+            TaskKind::Cron | TaskKind::Repeat => matches!(
+                self.status,
+                TaskStatus::Scheduled | TaskStatus::Success | TaskStatus::Failed
+            ),
+            TaskKind::Once => self.status == TaskStatus::Scheduled,
+        };
+        result.to_string()
     }
 }
 
