@@ -53,7 +53,7 @@ where
             loop {
                 let shutdown = clone.shutdown.read().await;
                 if *shutdown {
-                    tracing::info!("Received SIGINT (Ctrl+C), Stop to fetch pending tasks.");
+                    tracing::info!("Stop to fetch pending tasks.");
                     Self::send_poison(processors.clone()).await;
                     break;
                 }

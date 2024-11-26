@@ -76,7 +76,7 @@ impl PeriodicTask {
             match signal::ctrl_c().await {
                 Ok(()) => {
                     info!(
-                        "Received SIGINT (Ctrl+C), shutting down periodic task '{}'...",
+                        "Shutting down periodic task '{}'...",
                         &self.name
                     );
                     // Notify the task to shut down.
