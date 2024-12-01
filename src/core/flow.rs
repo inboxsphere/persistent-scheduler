@@ -1,12 +1,11 @@
 use crate::core::model::TaskMeta;
+use crate::core::processor::Package;
+use crate::core::shutdown::shutdown_signal;
 use crate::core::store::TaskStore;
 use crate::core::{handlers, processor::TaskProcessor, status_updater::TaskStatusUpdater};
 use ahash::AHashMap;
 use std::sync::Arc;
-use tokio::signal;
 use tokio::sync::RwLock;
-
-use super::processor::Package;
 
 pub struct TaskFlow<T>
 where
@@ -96,16 +95,10 @@ where
         let clone = Arc::clone(&self);
         let signal_handler = async move {
             // Listen for a shutdown signal (Ctrl+C).
-            match signal::ctrl_c().await {
-                Ok(()) => {
-                    // Notify the task to shut down.
-                    let mut triggered = clone.shutdown.write().await; // Acquire write lock to set shutdown state
-                    *triggered = true; // Set the shutdown state to true
-                }
-                Err(err) => {
-                    tracing::error!("Error listening for shutdown signal: {:?}", err);
-                }
-            }
+            shutdown_signal().await;
+            // Notify the task to shut down.
+            let mut triggered = clone.shutdown.write().await; // Acquire write lock to set shutdown state
+            *triggered = true; // Set the shutdown state to true
         };
 
         tokio::spawn(signal_handler);

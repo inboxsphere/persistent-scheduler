@@ -9,6 +9,7 @@ pub mod periodic;
 mod processor;
 mod result;
 pub mod retry;
+mod shutdown;
 mod status_updater;
 pub mod store;
 pub mod task;

@@ -1,6 +1,6 @@
 use crate::core::error::BoxError;
+use crate::core::shutdown::shutdown_signal;
 use std::{future::Future, sync::Arc, time::Duration};
-use tokio::signal;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tracing::{error, info, warn};
@@ -73,22 +73,10 @@ impl PeriodicTask {
         let signal_clone = Arc::clone(&self);
         let signal_handler = async move {
             // Listen for a shutdown signal (Ctrl+C).
-            match signal::ctrl_c().await {
-                Ok(()) => {
-                    info!(
-                        "Shutting down periodic task '{}'...",
-                        &self.name
-                    );
-                    // Notify the task to shut down.
-                    signal_clone.shutdown().await;
-                }
-                Err(err) => {
-                    error!(
-                        "Error listening for shutdown signal: {:?}",
-                        BoxError::from(err)
-                    );
-                }
-            }
+            shutdown_signal().await;
+            info!("Shutting down periodic task '{}'...", &self.name);
+            // Notify the task to shut down.
+            signal_clone.shutdown().await;
         };
 
         // Spawn the task runner and signal handler as asynchronous tasks.

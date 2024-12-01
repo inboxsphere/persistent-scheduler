@@ -52,7 +52,6 @@ impl TaskStatusUpdater {
                         UpdateRequest::PoisonPill => {
                             poison_pill += 1;
                             if poison_pill == processor_num {
-                                println!("The status update worker has exited.");
                                 break;
                             }
                         }

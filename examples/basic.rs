@@ -22,7 +22,7 @@ async fn main() {
         .start()
         .await;
     let mut tasks = Vec::new();
-    for _ in 0..1 {
+    for _ in 0..100 {
         tasks.push(TaskAndDelay {
             inner: MyTask1::new("name1".to_string(), 32),
             delay_seconds: None,
@@ -32,8 +32,7 @@ async fn main() {
     tokio::spawn(async move {
         context.add_tasks(tasks).await.unwrap();
     });
-
-    tokio::time::sleep(Duration::from_secs(100000000)).await;
+    tokio::time::sleep(Duration::from_secs(20)).await;
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -60,7 +59,7 @@ impl Task for MyTask1 {
         Box::pin(async move {
             // println!("{}", self.name);
             // println!("{}", self.age);
-            tokio::time::sleep(Duration::from_secs(15)).await;
+            //tokio::time::sleep(Duration::from_secs(15)).await;
             // println!("my task1 is running");
             Ok(())
         })
