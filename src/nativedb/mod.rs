@@ -4,17 +4,17 @@ use crate::core::task_kind::TaskKind;
 use native_db::*;
 use native_model::native_model;
 use native_model::Model;
-use once_cell::sync::{Lazy, OnceCell};
 use serde::{Deserialize, Serialize};
+use std::sync::{LazyLock, OnceLock};
 use tracing::error;
 
 pub mod meta;
 #[cfg(test)]
 mod tests;
 
-static DB: OnceCell<Database> = OnceCell::new();
+static DB: OnceLock<Database> = OnceLock::new();
 
-pub static TASK_SCHEDULER_MODELS: Lazy<Models> = Lazy::new(|| {
+pub static TASK_SCHEDULER_MODELS: LazyLock<Models> = LazyLock::new(|| {
     let mut models = Models::new();
     models
         .define::<TaskMetaEntity>()
