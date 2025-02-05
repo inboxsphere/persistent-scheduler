@@ -1,5 +1,4 @@
 use std::{sync::Arc, time::Duration};
-
 use persistent_scheduler::{
     core::{
         context::{TaskAndDelay, TaskContext},
@@ -87,10 +86,10 @@ impl MyTask2 {
 impl Task for MyTask2 {
     const TASK_KEY: &'static str = "my_task_c";
     const TASK_QUEUE: &'static str = "default";
-    const TASK_KIND: TaskKind = TaskKind::Cron;
-    const REPEAT_INTERVAL: Option<u32> = Some(2);
-    const SCHEDULE: Option<&'static str> = Some("1/2 * * * * *");
-    const TIMEZONE: Option<&'static str> = Some("Asia/Shanghai");
+    const TASK_KIND: TaskKind = TaskKind::Cron {
+        schedule: "1/2 * * * * *",
+        timezone: "Asia/Shanghai"
+    };
 
     fn run(self) -> TaskFuture {
         Box::pin(async move {

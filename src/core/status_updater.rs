@@ -1,5 +1,5 @@
 use crate::core::{
-    cron::next_run, model::TaskMeta, result::TaskResult, store::TaskStore, task_kind::TaskKind,
+    cron::next_run, model::TaskMeta, result::TaskResult, store::TaskStore, model::TaskKind,
 };
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -122,20 +122,14 @@ impl TaskStatusUpdater {
 
     async fn calculate_next_run(task: &TaskMeta) -> Option<i64> {
         // Calculate the next run time based on the task type
-        match task.kind {
-            TaskKind::Repeat => {
-                let next_run = task.next_run + (task.repeat_interval * 1000) as i64;
+        match &task.kind {
+            TaskKind::Repeat { interval_seconds } => {
+                let next_run = task.next_run + (interval_seconds * 1000) as i64;
                 Some(next_run) // Return the next run time for repeat tasks
             }
-            TaskKind::Cron => {
+            TaskKind::Cron { schedule, timezone } => {
                 // Calculate next run time for cron jobs using schedule and timezone
-                if let (Some(cron_schedule), Some(cron_timezone)) =
-                    (&task.cron_schedule, &task.cron_timezone)
-                {
-                    next_run(cron_schedule, cron_timezone, task.next_run)
-                } else {
-                    None // Return None if schedule or timezone is not defined
-                }
+                next_run(&*schedule, &*timezone, task.next_run)
             }
             _ => None, // No next run time for one-time tasks
         }

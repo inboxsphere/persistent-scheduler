@@ -1,6 +1,6 @@
 use crate::core::error::SchedulerError;
 use crate::core::model::{Retry, TaskMeta, TaskStatus};
-use crate::core::task_kind::TaskKind;
+use crate::core::model::TaskKind;
 use native_db::*;
 use native_model::native_model;
 use native_model::Model;
@@ -56,7 +56,7 @@ pub fn get_database() -> Result<&'static Database<'static>, SchedulerError> {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-#[native_model(id = 1, version = 1)]
+#[native_model(id = 1, version = 2)]
 #[native_db(secondary_key(clean_up -> String), secondary_key(candidate_task -> String))]
 pub struct TaskMetaEntity {
     #[primary_key]
@@ -81,17 +81,14 @@ pub struct TaskMetaEntity {
     pub base_interval: u32,  // Base interval for exponential backoff
     pub delay_seconds: u32,  //Delay before executing a Once task, specified in seconds
     pub max_retries: Option<u32>, // Maximum number of retries allowed
-    pub cron_schedule: Option<String>, // Cron expression for scheduling
-    pub cron_timezone: Option<String>, // Timezone for the cron schedule (stored as a string)
     pub is_repeating: bool,  // Indicates if the task is repeating
-    pub repeat_interval: u32, // Interval for repeating task
     pub heartbeat_at: i64,   // Timestamp of the last heartbeat in milliseconds
 }
 
 impl TaskMetaEntity {
     pub fn clean_up(&self) -> String {
         let result = match self.kind {
-            TaskKind::Cron | TaskKind::Repeat => matches!(self.status, TaskStatus::Removed),
+            TaskKind::Cron { .. } | TaskKind::Repeat { .. } => matches!(self.status, TaskStatus::Removed),
             TaskKind::Once => matches!(
                 self.status,
                 TaskStatus::Removed | TaskStatus::Success | TaskStatus::Failed
@@ -102,7 +99,7 @@ impl TaskMetaEntity {
 
     pub fn candidate_task(&self) -> String {
         let result = match self.kind {
-            TaskKind::Cron | TaskKind::Repeat => matches!(
+            TaskKind::Cron { .. } | TaskKind::Repeat { .. } => matches!(
                 self.status,
                 TaskStatus::Scheduled | TaskStatus::Success | TaskStatus::Failed
             ),
@@ -134,10 +131,7 @@ impl From<TaskMetaEntity> for TaskMeta {
             base_interval: entity.base_interval,
             delay_seconds: entity.delay_seconds,
             max_retries: entity.max_retries,
-            cron_schedule: entity.cron_schedule,
-            cron_timezone: entity.cron_timezone,
             is_repeating: entity.is_repeating,
-            repeat_interval: entity.repeat_interval,
             heartbeat_at: entity.heartbeat_at,
         }
     }
@@ -165,10 +159,7 @@ impl From<TaskMeta> for TaskMetaEntity {
             base_interval: entity.base_interval,
             delay_seconds: entity.delay_seconds,
             max_retries: entity.max_retries,
-            cron_schedule: entity.cron_schedule,
-            cron_timezone: entity.cron_timezone,
             is_repeating: entity.is_repeating,
-            repeat_interval: entity.repeat_interval,
             heartbeat_at: entity.heartbeat_at,
         }
     }

@@ -1,6 +1,5 @@
-use crate::core::task_kind::TaskKind;
 use crate::{
-    core::model::{TaskMeta, TaskStatus},
+    core::model::{TaskKind, TaskMeta, TaskStatus},
     utc_now,
 };
 use ahash::AHashMap;
@@ -171,7 +170,7 @@ impl InMemoryTaskStore {
 /// Determines if a task can be executed based on its kind and status.
 pub fn is_candidate_task(kind: &TaskKind, status: &TaskStatus) -> bool {
     match kind {
-        TaskKind::Cron | TaskKind::Repeat => matches!(
+        TaskKind::Cron { .. } | TaskKind::Repeat { .. } => matches!(
             status,
             TaskStatus::Scheduled | TaskStatus::Success | TaskStatus::Failed
         ),

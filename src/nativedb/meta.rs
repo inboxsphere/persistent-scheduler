@@ -3,7 +3,7 @@ use crate::core::model::TaskMeta;
 use crate::core::model::TaskStatus;
 use crate::core::store::is_candidate_task;
 use crate::core::store::TaskStore;
-use crate::core::task_kind::TaskKind;
+use crate::core::model::TaskKind;
 use crate::nativedb::get_database;
 use crate::nativedb::init_nativedb;
 use crate::nativedb::TaskMetaEntity;
@@ -276,7 +276,7 @@ impl NativeDbTaskStore {
         {
             let mut updated_entity = entity.clone(); // Clone to modify
             match updated_entity.kind {
-                TaskKind::Cron | TaskKind::Repeat => {
+                TaskKind::Cron { .. } | TaskKind::Repeat { .. } => {
                     updated_entity.status = TaskStatus::Scheduled; // Change status to Scheduled for Cron and Repeat
                 }
                 TaskKind::Once => {
@@ -291,33 +291,26 @@ impl NativeDbTaskStore {
         // Handle next run time for repeatable tasks
         for entity in targets
             .iter()
-            .filter(|e| matches!(e.kind, TaskKind::Cron | TaskKind::Repeat))
+            .filter(|e| matches!(e.kind, TaskKind::Cron { .. } | TaskKind::Repeat { .. }))
         {
             let mut updated = entity.clone();
-            match entity.kind {
-                TaskKind::Cron => {
-                    if let (Some(cron_schedule), Some(cron_timezone)) =
-                        (entity.cron_schedule.clone(), entity.cron_timezone.clone())
-                    {
-                        updated.next_run = next_run(
-                            cron_schedule.as_str(),
-                            cron_timezone.as_str(),
-                            utc_now!(),
-                        )
+            match &entity.kind {
+                TaskKind::Cron { schedule, timezone } => {
+                    updated.next_run = next_run(
+                        schedule,
+                        timezone,
+                        utc_now!(),
+                    )
                         .unwrap_or_else(|| {
                             updated.status = TaskStatus::Stopped; // Invalid configuration leads to Stopped
                             updated.stopped_reason = Some("Invalid cron configuration (automatically stopped during task restoration)".to_string());
                             updated.next_run // Keep current next_run
                         });
-                    } else {
-                        updated.status = TaskStatus::Stopped; // Configuration error leads to Stopped
-                        updated.stopped_reason = Some("Missing cron schedule or timezone (automatically stopped during task restoration)".to_string());
-                    }
                 }
-                TaskKind::Repeat => {
+                TaskKind::Repeat { interval_seconds } => {
                     updated.last_run = updated.next_run;
                     let calculated_next_run =
-                        updated.last_run + (updated.repeat_interval * 1000) as i64;
+                        updated.last_run + (interval_seconds * 1000) as i64;
                     updated.next_run = if calculated_next_run <= utc_now!() {
                         utc_now!()
                     } else {

@@ -89,19 +89,13 @@ where
     {
         let mut task_meta = task.new_meta(); // Create metadata for the new task
         let next_run = match T::TASK_KIND {
-            TaskKind::Once | TaskKind::Repeat => {
+            TaskKind::Once | TaskKind::Repeat { .. } => {
                 let delay_seconds = delay_seconds.unwrap_or(task_meta.delay_seconds) * 1000;
                 utc_now!() + delay_seconds as i64
             } // Set the next run time by adding a delay to the current time, allowing the task to run at a specified future time.
-            TaskKind::Cron => {
-                let schedule = T::SCHEDULE
-                    .ok_or_else(|| "Cron schedule is required for TaskKind::Cron".to_string())?; // Ensure a cron schedule is provided
-
-                let timezone = T::TIMEZONE
-                    .ok_or_else(|| "Timezone is required for TaskKind::Cron".to_string())?; // Ensure a timezone is provided
-
+            TaskKind::Cron { schedule, timezone } => {
                 // Calculate the next run time based on the cron schedule and timezone
-                next_run(schedule, timezone, 0).ok_or_else(|| {
+                next_run(&*schedule, &*timezone, 0).ok_or_else(|| {
                     format!("Failed to calculate next run for cron task '{}': invalid schedule or timezone", T::TASK_KEY)
                 })?
             }
@@ -125,21 +119,14 @@ where
         for task in tasks {
             let mut task_meta = task.inner.new_meta(); // Create metadata for the new task
             let next_run = match T::TASK_KIND {
-                TaskKind::Once | TaskKind::Repeat => {
+                TaskKind::Once | TaskKind::Repeat { .. } => {
                     let delay_seconds =
                         task.delay_seconds.unwrap_or(task_meta.delay_seconds) * 1000;
                     utc_now!() + delay_seconds as i64
                 } // Set the next run time by adding a delay to the current time, allowing the task to run at a specified future time.
-                TaskKind::Cron => {
-                    let schedule = T::SCHEDULE.ok_or_else(|| {
-                        "Cron schedule is required for TaskKind::Cron".to_string()
-                    })?; // Ensure a cron schedule is provided
-
-                    let timezone = T::TIMEZONE
-                        .ok_or_else(|| "Timezone is required for TaskKind::Cron".to_string())?; // Ensure a timezone is provided
-
+                TaskKind::Cron { schedule, timezone } => {
                     // Calculate the next run time based on the cron schedule and timezone
-                    next_run(schedule, timezone, 0).ok_or_else(|| {
+                    next_run(&*schedule, &*timezone, 0).ok_or_else(|| {
                     format!("Failed to calculate next run for cron task '{}': invalid schedule or timezone", T::TASK_KEY)
                 })?
                 }

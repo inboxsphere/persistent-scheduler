@@ -1,4 +1,5 @@
 use crate::core::model::TaskMeta;
+use crate::core::model::TaskKind as ModelTaskKind;
 use crate::core::retry::{RetryPolicy, RetryStrategy};
 use crate::core::task_kind::TaskKind;
 use serde::{de::DeserializeOwned, Serialize};
@@ -25,23 +26,6 @@ pub trait Task: Serialize + DeserializeOwned + 'static {
     ///
     /// This specifies the task behavior and can be one of the `TaskKind` variants.
     const TASK_KIND: TaskKind;
-
-    /// Schedule expression for Cron tasks.
-    ///
-    /// This field is required if `TASK_KIND` is `TaskKind::Cron`.
-    /// It defines the schedule on which the task should run.
-    const SCHEDULE: Option<&'static str> = None;
-
-    /// Timezone for the schedule expression.
-    ///
-    /// This is required for `TaskKind::Cron` and specifies the timezone for the cron schedule.
-    const TIMEZONE: Option<&'static str> = None;
-
-    /// Repeat interval for Repeat tasks, in seconds.
-    ///
-    /// This field is required if `TASK_KIND` is `TaskKind::Repeat`.
-    /// It defines the interval between consecutive executions of the task.
-    const REPEAT_INTERVAL: Option<u32> = None;
 
     /// The retry policy for this task.
     ///
@@ -72,31 +56,21 @@ pub trait Task: Serialize + DeserializeOwned + 'static {
         }
 
         match Self::TASK_KIND {
-            TaskKind::Cron => {
-                let schedule = Self::SCHEDULE.as_ref();
-                let timezone = Self::TIMEZONE.as_ref();
-
-                if schedule.is_none() || timezone.is_none() {
-                    return Err("Both SCHEDULE and TIMEZONE must be defined for Cron tasks.".into());
-                }
-
-                let schedule_str = schedule.unwrap();
-                let timezone_str = timezone.unwrap();
-
-                if !is_valid_cron_string(schedule_str) {
+            TaskKind::Cron { schedule, timezone } => {
+                if !is_valid_cron_string(&*schedule) {
                     return Err(
-                        format!("Invalid SCHEDULE: '{}' for Cron tasks.", schedule_str).into(),
+                        format!("Invalid SCHEDULE: '{}' for Cron tasks.", schedule).into(),
                     );
                 }
 
-                if !is_valid_timezone(timezone_str) {
+                if !is_valid_timezone(&*timezone) {
                     return Err(
-                        format!("Invalid TIMEZONE: '{}' for Cron tasks.", timezone_str).into(),
+                        format!("Invalid TIMEZONE: '{}' for Cron tasks.", schedule).into(),
                     );
                 }
             }
-            TaskKind::Repeat => {
-                if Self::REPEAT_INTERVAL.unwrap_or(0) <= 0 {
+            TaskKind::Repeat { interval_seconds } => {
+                if interval_seconds <= 0 {
                     return Err("A valid REPEAT_INTERVAL must be defined for Repeat tasks.".into());
                 }
             }
@@ -126,12 +100,19 @@ pub trait Task: Serialize + DeserializeOwned + 'static {
                 "Serialization failed: this should never happen if all fields are serializable",
             ),
             Self::TASK_QUEUE.to_owned(),
-            Self::TASK_KIND,
+            match Self::TASK_KIND {
+                TaskKind::Cron { schedule, timezone } => {
+                    ModelTaskKind::Cron {
+                        schedule: schedule.into(), timezone: timezone.into(),
+                    }
+                }
+                TaskKind::Repeat { interval_seconds } => {
+                    ModelTaskKind::Repeat { interval_seconds }
+                }
+                TaskKind::Once => ModelTaskKind::Once
+            },
             Self::RETRY_POLICY,
-            Self::SCHEDULE.map(|s| s.to_string()),
-            Self::TIMEZONE.map(|s| s.to_string()),
-            matches!(Self::TASK_KIND, TaskKind::Repeat),
-            Self::REPEAT_INTERVAL,
+            matches!(Self::TASK_KIND, TaskKind::Repeat { .. }),
             Self::DELAY_SECONDS,
         )
     }

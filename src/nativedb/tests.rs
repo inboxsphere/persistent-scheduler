@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use native_db::Builder;
 
-use crate::{core::{model::TaskStatus, task_kind::TaskKind}, generate_token};
+use crate::{core::{model::TaskStatus, model::TaskKind}, generate_token};
 
 use super::{TaskMetaEntity, TaskMetaEntityKey, TASK_SCHEDULER_MODELS};
 
@@ -23,7 +23,7 @@ fn test() {
     let mut task3 = TaskMetaEntity::default();
     task3.id = generate_token!();
     task3.status = TaskStatus::Failed;
-    task3.kind = TaskKind::Cron;
+    task3.kind = TaskKind::Cron { schedule: "5 4 * * *".into(), timezone: "UTC".into() };
 
     rw.insert(task1).unwrap();
     rw.insert(task2).unwrap();

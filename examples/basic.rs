@@ -82,10 +82,9 @@ impl MyTask2 {
 impl Task for MyTask2 {
     const TASK_KEY: &'static str = "my_task_b";
     const TASK_QUEUE: &'static str = "default";
-    const TASK_KIND: TaskKind = TaskKind::Repeat;
-    const REPEAT_INTERVAL: Option<u32> = Some(10);
-    //const SCHEDULE: Option<&'static str> = Some("1/10 * * * * *");
-    //const TIMEZONE: Option<&'static str> = Some("Asia/Shanghai");
+    const TASK_KIND: TaskKind = TaskKind::Repeat {
+        interval_seconds: 10
+    };
 
     fn run(self) -> TaskFuture {
         Box::pin(async move {
