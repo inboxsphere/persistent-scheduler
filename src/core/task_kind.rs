@@ -6,9 +6,9 @@ pub enum TaskKind {
     /// Represents a cron job, which is scheduled to run at specific intervals.
     Cron {
         /// Schedule expression for Cron tasks.
-        schedule: &'static str,
+        schedule: String,
         /// Timezone for the schedule expression.
-        timezone: &'static str,
+        timezone: String,
     },
 
     /// Represents a repeated job that runs at a regular interval.

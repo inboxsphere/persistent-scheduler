@@ -83,12 +83,17 @@ where
     }
 
     /// Adds a new task to the context for execution.
-    pub async fn add_task<T>(&self, task: T, delay_seconds: Option<u32>) -> Result<(), String>
+    pub async fn add_task<T>(
+        &self,
+        task: T,
+        kind: TaskKind,
+        delay_seconds: Option<u32>
+    ) -> Result<(), String>
     where
         T: Task + Send + Sync + 'static, // T must implement the Task trait and be thread-safe
     {
-        let mut task_meta = task.new_meta(); // Create metadata for the new task
-        let next_run = match T::TASK_KIND {
+        let mut task_meta = task.new_meta(kind); // Create metadata for the new task
+        let next_run = match &task_meta.kind {
             TaskKind::Once | TaskKind::Repeat { .. } => {
                 let delay_seconds = delay_seconds.unwrap_or(task_meta.delay_seconds) * 1000;
                 utc_now!() + delay_seconds as i64
@@ -110,15 +115,15 @@ where
     }
 
     /// Adds a new task to the context for execution.
-    pub async fn add_tasks<T>(&self, tasks: Vec<TaskAndDelay<T>>) -> Result<(), String>
+    pub async fn add_tasks<T>(&self, tasks: Vec<TaskConfiguration<T>>) -> Result<(), String>
     where
         T: Task + Send + Sync + 'static, // T must implement the Task trait and be thread-safe
     {
         let mut batch: Vec<TaskMeta> = Vec::new();
 
         for task in tasks {
-            let mut task_meta = task.inner.new_meta(); // Create metadata for the new task
-            let next_run = match T::TASK_KIND {
+            let mut task_meta = task.inner.new_meta(task.kind); // Create metadata for the new task
+            let next_run = match &task_meta.kind {
                 TaskKind::Once | TaskKind::Repeat { .. } => {
                     let delay_seconds =
                         task.delay_seconds.unwrap_or(task_meta.delay_seconds) * 1000;
@@ -144,7 +149,8 @@ where
     }
 }
 
-pub struct TaskAndDelay<T: Task> {
+pub struct TaskConfiguration<T: Task> {
     pub inner: T,
+    pub kind: TaskKind,
     pub delay_seconds: Option<u32>,
 }

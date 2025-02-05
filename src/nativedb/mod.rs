@@ -1,12 +1,12 @@
 use crate::core::error::SchedulerError;
 use crate::core::model::{Retry, TaskMeta, TaskStatus};
-use crate::core::model::TaskKind;
 use native_db::*;
 use native_model::native_model;
 use native_model::Model;
 use serde::{Deserialize, Serialize};
 use std::sync::{LazyLock, OnceLock};
 use tracing::error;
+use crate::core::task_kind::TaskKind;
 
 pub mod meta;
 #[cfg(test)]

@@ -1,8 +1,8 @@
 use itertools::Itertools;
 use native_db::Builder;
 
-use crate::{core::{model::TaskStatus, model::TaskKind}, generate_token};
-
+use crate::{core::model::TaskStatus, generate_token};
+use crate::core::task_kind::TaskKind;
 use super::{TaskMetaEntity, TaskMetaEntityKey, TASK_SCHEDULER_MODELS};
 
 #[test]

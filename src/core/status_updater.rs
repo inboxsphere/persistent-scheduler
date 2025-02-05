@@ -1,9 +1,10 @@
 use crate::core::{
-    cron::next_run, model::TaskMeta, result::TaskResult, store::TaskStore, model::TaskKind,
+    cron::next_run, model::TaskMeta, result::TaskResult, store::TaskStore
 };
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::error;
+use crate::core::task_kind::TaskKind;
 
 #[derive(Debug)]
 pub enum UpdateRequest {

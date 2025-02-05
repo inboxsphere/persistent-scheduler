@@ -1,5 +1,4 @@
 use crate::core::model::TaskMeta;
-use crate::core::model::TaskKind as ModelTaskKind;
 use crate::core::retry::{RetryPolicy, RetryStrategy};
 use crate::core::task_kind::TaskKind;
 use serde::{de::DeserializeOwned, Serialize};
@@ -21,11 +20,6 @@ pub trait Task: Serialize + DeserializeOwned + 'static {
     /// This can be overridden at the individual task level. If a non-existent queue is specified,
     /// the task will not be processed.
     const TASK_QUEUE: &'static str;
-
-    /// The type of task being defined.
-    ///
-    /// This specifies the task behavior and can be one of the `TaskKind` variants.
-    const TASK_KIND: TaskKind;
 
     /// The retry policy for this task.
     ///
@@ -50,12 +44,12 @@ pub trait Task: Serialize + DeserializeOwned + 'static {
     /// Validates the parameters based on the task type.
     ///
     /// Checks that the necessary fields for the specific `TaskKind` are provided.
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self, kind: &TaskKind) -> Result<(), String> {
         if Self::TASK_QUEUE.is_empty() {
             return Err("TASK_QUEUE must not be empty.".into());
         }
 
-        match Self::TASK_KIND {
+        match kind {
             TaskKind::Cron { schedule, timezone } => {
                 if !is_valid_cron_string(&*schedule) {
                     return Err(
@@ -70,7 +64,7 @@ pub trait Task: Serialize + DeserializeOwned + 'static {
                 }
             }
             TaskKind::Repeat { interval_seconds } => {
-                if interval_seconds <= 0 {
+                if interval_seconds <= &0 {
                     return Err("A valid REPEAT_INTERVAL must be defined for Repeat tasks.".into());
                 }
             }
@@ -85,8 +79,8 @@ pub trait Task: Serialize + DeserializeOwned + 'static {
     ///
     /// This method generates a `TaskMetaEntity` instance based on the task's properties.
     /// It validates required fields and panics if validation fails.
-    fn new_meta(&self) -> TaskMeta {
-        self.validate().unwrap_or_else(|err| {
+    fn new_meta(&self, kind: TaskKind) -> TaskMeta {
+        self.validate(&kind).unwrap_or_else(|err| {
             panic!(
                 "Validation failed for task '{}': {}. This indicates a programming error.",
                 Self::TASK_KEY,
@@ -94,25 +88,16 @@ pub trait Task: Serialize + DeserializeOwned + 'static {
             )
         });
 
+        let is_repeating = matches!(kind, TaskKind::Repeat { .. });
         TaskMeta::new(
             Self::TASK_KEY.to_owned(),
             serde_json::to_string(&self).expect(
                 "Serialization failed: this should never happen if all fields are serializable",
             ),
             Self::TASK_QUEUE.to_owned(),
-            match Self::TASK_KIND {
-                TaskKind::Cron { schedule, timezone } => {
-                    ModelTaskKind::Cron {
-                        schedule: schedule.into(), timezone: timezone.into(),
-                    }
-                }
-                TaskKind::Repeat { interval_seconds } => {
-                    ModelTaskKind::Repeat { interval_seconds }
-                }
-                TaskKind::Once => ModelTaskKind::Once
-            },
+            kind,
             Self::RETRY_POLICY,
-            matches!(Self::TASK_KIND, TaskKind::Repeat { .. }),
+            is_repeating,
             Self::DELAY_SECONDS,
         )
     }

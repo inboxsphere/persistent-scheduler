@@ -6,6 +6,8 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use crate::core::task_kind::TaskKind;
+
 type LinearInterval = u32;
 type ExponentialBase = u32;
 
@@ -32,28 +34,6 @@ pub struct TaskMeta {
     pub max_retries: Option<u32>,       // Maximum number of retries allowed
     pub is_repeating: bool,             // Indicates if the task is repeating
     pub heartbeat_at: i64,              // Timestamp of the last heartbeat in milliseconds
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-/// Defines the type of task to be executed.
-pub enum TaskKind {
-    /// Represents a cron job, which is scheduled to run at specific intervals.
-    Cron {
-        /// Schedule expression for Cron tasks.
-        schedule: String,
-        /// Timezone for the schedule expression.
-        timezone: String,
-    },
-
-    /// Represents a repeated job that runs at a regular interval.
-    Repeat {
-        /// Repeat interval for Repeat tasks, in seconds.
-        interval_seconds: u32
-    },
-
-    /// Represents a one-time job that runs once and then completes.
-    #[default]
-    Once,
 }
 
 #[derive(Clone, Debug, Eq, Default, PartialEq, Serialize, Deserialize, Hash)]

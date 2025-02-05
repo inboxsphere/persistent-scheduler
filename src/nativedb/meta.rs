@@ -3,7 +3,6 @@ use crate::core::model::TaskMeta;
 use crate::core::model::TaskStatus;
 use crate::core::store::is_candidate_task;
 use crate::core::store::TaskStore;
-use crate::core::model::TaskKind;
 use crate::nativedb::get_database;
 use crate::nativedb::init_nativedb;
 use crate::nativedb::TaskMetaEntity;
@@ -16,6 +15,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use thiserror::Error;
 use tracing::debug;
+use crate::core::task_kind::TaskKind;
 
 #[derive(Error, Debug)]
 pub enum NativeDbTaskStoreError {

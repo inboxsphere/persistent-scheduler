@@ -1,5 +1,5 @@
 use crate::{
-    core::model::{TaskKind, TaskMeta, TaskStatus},
+    core::model::{TaskMeta, TaskStatus},
     utc_now,
 };
 use ahash::AHashMap;
@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use std::{error::Error, sync::Arc};
 use thiserror::Error;
 use tokio::sync::RwLock;
+use crate::core::task_kind::TaskKind;
 
 #[async_trait::async_trait]
 pub trait TaskStore: Clone + Send {
