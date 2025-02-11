@@ -83,25 +83,24 @@ where
     }
 
     /// Adds a new task to the context for execution.
-    pub async fn add_task<T>(&self, task: T, delay_seconds: Option<u32>) -> Result<(), String>
+    pub async fn add_task<T>(
+        &self,
+        task: T,
+        kind: TaskKind,
+        delay_seconds: Option<u32>
+    ) -> Result<(), String>
     where
         T: Task + Send + Sync + 'static, // T must implement the Task trait and be thread-safe
     {
-        let mut task_meta = task.new_meta(); // Create metadata for the new task
-        let next_run = match T::TASK_KIND {
-            TaskKind::Once | TaskKind::Repeat => {
+        let mut task_meta = task.new_meta(kind); // Create metadata for the new task
+        let next_run = match &task_meta.kind {
+            TaskKind::Once | TaskKind::Repeat { .. } => {
                 let delay_seconds = delay_seconds.unwrap_or(task_meta.delay_seconds) * 1000;
                 utc_now!() + delay_seconds as i64
             } // Set the next run time by adding a delay to the current time, allowing the task to run at a specified future time.
-            TaskKind::Cron => {
-                let schedule = T::SCHEDULE
-                    .ok_or_else(|| "Cron schedule is required for TaskKind::Cron".to_string())?; // Ensure a cron schedule is provided
-
-                let timezone = T::TIMEZONE
-                    .ok_or_else(|| "Timezone is required for TaskKind::Cron".to_string())?; // Ensure a timezone is provided
-
+            TaskKind::Cron { schedule, timezone } => {
                 // Calculate the next run time based on the cron schedule and timezone
-                next_run(schedule, timezone, 0).ok_or_else(|| {
+                next_run(&*schedule, &*timezone, 0).ok_or_else(|| {
                     format!("Failed to calculate next run for cron task '{}': invalid schedule or timezone", T::TASK_KEY)
                 })?
             }
@@ -116,30 +115,23 @@ where
     }
 
     /// Adds a new task to the context for execution.
-    pub async fn add_tasks<T>(&self, tasks: Vec<TaskAndDelay<T>>) -> Result<(), String>
+    pub async fn add_tasks<T>(&self, tasks: Vec<TaskConfiguration<T>>) -> Result<(), String>
     where
         T: Task + Send + Sync + 'static, // T must implement the Task trait and be thread-safe
     {
         let mut batch: Vec<TaskMeta> = Vec::new();
 
         for task in tasks {
-            let mut task_meta = task.inner.new_meta(); // Create metadata for the new task
-            let next_run = match T::TASK_KIND {
-                TaskKind::Once | TaskKind::Repeat => {
+            let mut task_meta = task.inner.new_meta(task.kind); // Create metadata for the new task
+            let next_run = match &task_meta.kind {
+                TaskKind::Once | TaskKind::Repeat { .. } => {
                     let delay_seconds =
                         task.delay_seconds.unwrap_or(task_meta.delay_seconds) * 1000;
                     utc_now!() + delay_seconds as i64
                 } // Set the next run time by adding a delay to the current time, allowing the task to run at a specified future time.
-                TaskKind::Cron => {
-                    let schedule = T::SCHEDULE.ok_or_else(|| {
-                        "Cron schedule is required for TaskKind::Cron".to_string()
-                    })?; // Ensure a cron schedule is provided
-
-                    let timezone = T::TIMEZONE
-                        .ok_or_else(|| "Timezone is required for TaskKind::Cron".to_string())?; // Ensure a timezone is provided
-
+                TaskKind::Cron { schedule, timezone } => {
                     // Calculate the next run time based on the cron schedule and timezone
-                    next_run(schedule, timezone, 0).ok_or_else(|| {
+                    next_run(&*schedule, &*timezone, 0).ok_or_else(|| {
                     format!("Failed to calculate next run for cron task '{}': invalid schedule or timezone", T::TASK_KEY)
                 })?
                 }
@@ -157,7 +149,8 @@ where
     }
 }
 
-pub struct TaskAndDelay<T: Task> {
+pub struct TaskConfiguration<T: Task> {
     pub inner: T,
+    pub kind: TaskKind,
     pub delay_seconds: Option<u32>,
 }

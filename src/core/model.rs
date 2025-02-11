@@ -1,12 +1,13 @@
 use crate::{
     core::{
         retry::{RetryPolicy, RetryStrategy},
-        task_kind::TaskKind,
     },
     generate_token, utc_now,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use crate::core::task_kind::TaskKind;
+
 type LinearInterval = u32;
 type ExponentialBase = u32;
 
@@ -31,10 +32,7 @@ pub struct TaskMeta {
     pub base_interval: u32,             // Base interval for exponential backoff
     pub delay_seconds: u32,             //Delay before executing a Once task, specified in seconds
     pub max_retries: Option<u32>,       // Maximum number of retries allowed
-    pub cron_schedule: Option<String>,  // Cron expression for scheduling
-    pub cron_timezone: Option<String>,  // Timezone for the cron schedule (stored as a string)
     pub is_repeating: bool,             // Indicates if the task is repeating
-    pub repeat_interval: u32,           // Interval for repeating task
     pub heartbeat_at: i64,              // Timestamp of the last heartbeat in milliseconds
 }
 
@@ -104,18 +102,11 @@ impl TaskMeta {
         queue_name: String,
         kind: TaskKind,
         retry_policy: RetryPolicy,
-        cron_schedule: Option<String>,
-        cron_timezone: Option<String>,
         is_repeating: bool,
-        repeat_interval: Option<u32>,
         delay_seconds: u32,
     ) -> Self {
         // Extract retry strategy and intervals from the given retry policy.
         let (retry_strategy, retry_interval, base_interval) = to_retry(retry_policy);
-        let repeat_interval = match repeat_interval {
-            Some(v) => v,
-            None => Default::default(),
-        };
         Self {
             id: generate_token!(),
             task_key,
@@ -135,10 +126,7 @@ impl TaskMeta {
             retry_interval,
             base_interval,
             max_retries: retry_policy.max_retries,
-            cron_schedule,
-            cron_timezone,
             is_repeating,
-            repeat_interval,
             heartbeat_at: Default::default(),
             delay_seconds,
         }

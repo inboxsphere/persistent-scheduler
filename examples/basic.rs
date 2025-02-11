@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use persistent_scheduler::core::{
-    context::{TaskAndDelay, TaskContext},
+    context::{TaskConfiguration, TaskContext},
     store::InMemoryTaskStore,
     task::{Task, TaskFuture},
     task_kind::TaskKind,
@@ -23,8 +23,9 @@ async fn main() {
         .await;
     let mut tasks = Vec::new();
     for _ in 0..100 {
-        tasks.push(TaskAndDelay {
+        tasks.push(TaskConfiguration {
             inner: MyTask1::new("name1".to_string(), 32),
+            kind: TaskKind::Once,
             delay_seconds: None,
         });
     }
@@ -53,9 +54,6 @@ impl Task for MyTask1 {
 
     const TASK_QUEUE: &'static str = "default";
 
-    const TASK_KIND: TaskKind = TaskKind::Once;
-    //const RETRY_POLICY: RetryPolicy = RetryPolicy::linear(10, Some(5));
-
     fn run(self) -> TaskFuture {
         Box::pin(async move {
             // println!("{}", self.name);
@@ -82,10 +80,6 @@ impl MyTask2 {
 impl Task for MyTask2 {
     const TASK_KEY: &'static str = "my_task_b";
     const TASK_QUEUE: &'static str = "default";
-    const TASK_KIND: TaskKind = TaskKind::Repeat;
-    const REPEAT_INTERVAL: Option<u32> = Some(10);
-    //const SCHEDULE: Option<&'static str> = Some("1/10 * * * * *");
-    //const TIMEZONE: Option<&'static str> = Some("Asia/Shanghai");
 
     fn run(self) -> TaskFuture {
         Box::pin(async move {

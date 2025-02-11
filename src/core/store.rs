@@ -1,4 +1,3 @@
-use crate::core::task_kind::TaskKind;
 use crate::{
     core::model::{TaskMeta, TaskStatus},
     utc_now,
@@ -8,6 +7,7 @@ use async_trait::async_trait;
 use std::{error::Error, sync::Arc};
 use thiserror::Error;
 use tokio::sync::RwLock;
+use crate::core::task_kind::TaskKind;
 
 #[async_trait::async_trait]
 pub trait TaskStore: Clone + Send {
@@ -171,7 +171,7 @@ impl InMemoryTaskStore {
 /// Determines if a task can be executed based on its kind and status.
 pub fn is_candidate_task(kind: &TaskKind, status: &TaskStatus) -> bool {
     match kind {
-        TaskKind::Cron | TaskKind::Repeat => matches!(
+        TaskKind::Cron { .. } | TaskKind::Repeat { .. } => matches!(
             status,
             TaskStatus::Scheduled | TaskStatus::Success | TaskStatus::Failed
         ),
