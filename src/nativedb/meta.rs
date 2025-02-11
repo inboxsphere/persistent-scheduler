@@ -1,9 +1,8 @@
 use crate::core::cron::next_run;
 use crate::core::model::TaskMeta;
 use crate::core::model::TaskStatus;
-use crate::core::store::is_candidate_task;
 use crate::core::store::TaskStore;
-use crate::nativedb::get_database;
+use crate::nativedb::{get_database, TaskKindEntity};
 use crate::nativedb::init_nativedb;
 use crate::nativedb::TaskMetaEntity;
 use crate::nativedb::TaskMetaEntityKey;
@@ -15,7 +14,6 @@ use std::sync::Arc;
 use std::time::Instant;
 use thiserror::Error;
 use tracing::debug;
-use crate::core::task_kind::TaskKind;
 
 #[derive(Error, Debug)]
 pub enum NativeDbTaskStoreError {
@@ -276,10 +274,10 @@ impl NativeDbTaskStore {
         {
             let mut updated_entity = entity.clone(); // Clone to modify
             match updated_entity.kind {
-                TaskKind::Cron { .. } | TaskKind::Repeat { .. } => {
+                TaskKindEntity::Cron | TaskKindEntity::Repeat => {
                     updated_entity.status = TaskStatus::Scheduled; // Change status to Scheduled for Cron and Repeat
                 }
-                TaskKind::Once => {
+                TaskKindEntity::Once => {
                     updated_entity.status = TaskStatus::Removed; // Remove Once tasks if they didn't complete
                 }
             }
@@ -291,26 +289,33 @@ impl NativeDbTaskStore {
         // Handle next run time for repeatable tasks
         for entity in targets
             .iter()
-            .filter(|e| matches!(e.kind, TaskKind::Cron { .. } | TaskKind::Repeat { .. }))
+            .filter(|e| matches!(e.kind, TaskKindEntity::Cron | TaskKindEntity::Repeat))
         {
             let mut updated = entity.clone();
-            match &entity.kind {
-                TaskKind::Cron { schedule, timezone } => {
-                    updated.next_run = next_run(
-                        schedule,
-                        timezone,
-                        utc_now!(),
-                    )
+            match entity.kind {
+                TaskKindEntity::Cron => {
+                    if let (Some(cron_schedule), Some(cron_timezone)) =
+                        (entity.cron_schedule.clone(), entity.cron_timezone.clone())
+                    {
+                        updated.next_run = next_run(
+                            cron_schedule.as_str(),
+                            cron_timezone.as_str(),
+                            utc_now!(),
+                        )
                         .unwrap_or_else(|| {
                             updated.status = TaskStatus::Stopped; // Invalid configuration leads to Stopped
                             updated.stopped_reason = Some("Invalid cron configuration (automatically stopped during task restoration)".to_string());
                             updated.next_run // Keep current next_run
                         });
+                    } else {
+                        updated.status = TaskStatus::Stopped; // Configuration error leads to Stopped
+                        updated.stopped_reason = Some("Missing cron schedule or timezone (automatically stopped during task restoration)".to_string());
+                    }
                 }
-                TaskKind::Repeat { interval_seconds } => {
+                TaskKindEntity::Repeat => {
                     updated.last_run = updated.next_run;
                     let calculated_next_run =
-                        updated.last_run + (interval_seconds * 1000) as i64;
+                        updated.last_run + (updated.repeat_interval * 1000) as i64;
                     updated.next_run = if calculated_next_run <= utc_now!() {
                         utc_now!()
                     } else {
@@ -366,6 +371,17 @@ impl NativeDbTaskStore {
         }
         rw.commit()?;
         Ok(())
+    }
+}
+
+/// Determines if a task can be executed based on its kind and status.
+pub fn is_candidate_task(kind: &TaskKindEntity, status: &TaskStatus) -> bool {
+    match kind {
+        TaskKindEntity::Cron | TaskKindEntity::Repeat => matches!(
+            status,
+            TaskStatus::Scheduled | TaskStatus::Success | TaskStatus::Failed
+        ),
+        TaskKindEntity::Once => *status == TaskStatus::Scheduled,
     }
 }
 
