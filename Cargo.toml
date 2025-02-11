@@ -1,11 +1,11 @@
 [package]
 name = "persistent-scheduler"
-version = "0.2.2"
+version = "0.3.0"
 author = "Pedro Rocha"
 edition = "2021"
 description = "A high-performance task scheduling system developed in Rust using Tokio. This system supports task persistence, repeatable tasks, Cron-based scheduling, and one-time tasks, ensuring reliability and flexibility for managing time-based operations in various applications."
 license-file = "LICENSE"
-documentation = "https://docs.rs/persistent-scheduler/0.2.2/"
+documentation = "https://docs.rs/persistent-scheduler/0.3.0/"
 repository = "https://github.com/inboxsphere/persistent-scheduler"
 
 [features]
@@ -15,20 +15,20 @@ nativedb = ["native_db", "native_model", "itertools", "sysinfo"]
 
 [dependencies]
 serde = { version = "1.0.217", features = ["derive"] }
-thiserror = "2.0.9"
-tokio = { version = "1.42.0", features = ["full"] }
+thiserror = "2.0.11"
+tokio = { version = "1.43.0", features = ["full"] }
 croner = "2.1.0"
 chrono = "0.4.39"
-chrono-tz = "0.10.0"
-serde_json = "1.0.134"
-ulid = "1.1.2"
+chrono-tz = "0.10.1"
+serde_json = "1.0.138"
+ulid = "1.2.0"
 tracing = "0.1.41"
-async-trait = "0.1.83"
+async-trait = "0.1.86"
 tracing-subscriber = "0.3.19"
 
 native_db = { version = "0.8.1", optional = true }
 native_model = { version = "0.4.20", optional = true }
-itertools = { version = "0.13.0", optional = true }
+itertools = { version = "0.14.0", optional = true }
 sysinfo = { version = "0.33.1", optional = true }
 ahash = "0.8.11"
 
