@@ -110,7 +110,7 @@ where
         tasks: Vec<TaskMeta>,
     ) -> Result<(), String> {
         let processor = processors.get(queue_name).ok_or_else(|| format!(
-            "Unexpected error: failed to find the processor for queue '{}'. This should not happen.",
+            "Processor for queue '{}' not found. You may have forgotten to call `.register::<MyTask>()` on the TaskContext instance.",
             queue_name
         ))?;
 
