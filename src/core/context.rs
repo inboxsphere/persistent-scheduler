@@ -36,6 +36,15 @@ where
         }
     }
 
+    /// Creates a new TaskContext with the provided Arc-wrapped store.
+    pub fn with_arc_store(store: Arc<S>) -> Self {
+        Self {
+            queue_concurrency: AHashMap::new(), // Initialize concurrency map as empty
+            handlers: TaskHandlers::new(),      // Create a new TaskHandlers instance
+            store,                              // Use the provided Arc directly
+        }
+    }
+
     /// Registers a new task type in the context.
     pub fn register<T>(mut self) -> Self
     where
@@ -87,7 +96,7 @@ where
         &self,
         task: T,
         kind: TaskKind,
-        delay_seconds: Option<u32>
+        delay_seconds: Option<u32>,
     ) -> Result<(), String>
     where
         T: Task + Send + Sync + 'static, // T must implement the Task trait and be thread-safe
