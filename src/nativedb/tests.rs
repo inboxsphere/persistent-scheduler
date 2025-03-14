@@ -2,12 +2,12 @@ use itertools::Itertools;
 use native_db::Builder;
 
 use crate::{core::model::TaskStatus, generate_token};
-use super::{TaskKindEntity, TaskMetaEntity, TaskMetaEntityKey, TASK_SCHEDULER_MODELS};
+use super::{TaskKindEntity, TaskMetaEntity, TaskMetaEntityKey, MODELS};
 
 #[test]
 fn test() {
     let database = Builder::new()
-        .create_in_memory(&TASK_SCHEDULER_MODELS)
+        .create_in_memory(&MODELS)
         .unwrap();
 
     let rw = database.rw_transaction().unwrap();

@@ -24,7 +24,7 @@ pub trait Task: Serialize + DeserializeOwned + 'static {
     /// The retry policy for this task.
     ///
     /// Defines the strategy and maximum retry attempts in case of failure.
-    /// Default is exponential backoff with a base of 2 and a maximum of 5 retries.
+    /// Default is exponential backoff with a base of 2 and a maximum of 3 retries.
     const RETRY_POLICY: RetryPolicy = RetryPolicy {
         strategy: RetryStrategy::Exponential { base: 2 },
         max_retries: Some(3),

@@ -2,10 +2,10 @@ use crate::core::cron::next_run;
 use crate::core::model::TaskMeta;
 use crate::core::model::TaskStatus;
 use crate::core::store::TaskStore;
-use crate::nativedb::{get_database, TaskKindEntity};
 use crate::nativedb::init_nativedb;
 use crate::nativedb::TaskMetaEntity;
 use crate::nativedb::TaskMetaEntityKey;
+use crate::nativedb::{get_database, TaskKindEntity};
 use crate::utc_now;
 use async_trait::async_trait;
 use itertools::Itertools;
@@ -201,8 +201,9 @@ impl NativeDbTaskStore {
         let entities: Vec<TaskMetaEntity> = rw
             .scan()
             .secondary(TaskMetaEntityKey::clean_up)?
-            .start_with(true.to_string())?
+            .start_with("true")?
             .try_collect()?;
+        //Only tasks finished older than 30 minutes are actually cleaned.
         for entity in entities {
             if (utc_now!() - entity.updated_at) > 30 * 60 * 1000 {
                 rw.remove(entity)?;

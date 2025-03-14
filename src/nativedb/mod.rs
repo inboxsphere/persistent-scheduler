@@ -14,7 +14,7 @@ mod tests;
 
 static DB: OnceLock<Database> = OnceLock::new();
 
-pub static TASK_SCHEDULER_MODELS: LazyLock<Models> = LazyLock::new(|| {
+pub static MODELS: LazyLock<Models> = LazyLock::new(|| {
     let mut models = Models::new();
     models
         .define::<TaskMetaEntity>()
@@ -33,14 +33,14 @@ pub fn init_nativedb(
 
     let db_file = db_path.unwrap_or_else(|| {
         std::env::temp_dir()
-            .join("task-scheduler.db")
+            .join("tasks.db")
             .to_string_lossy()
             .into_owned()
     });
 
     let database = Builder::new()
         .set_cache_size(cache_size as usize)
-        .create(&TASK_SCHEDULER_MODELS, db_file.as_str());
+        .create(&MODELS, db_file.as_str());
 
     if let Err(e) = database {
         error!("Error init native db {:?}", e);
@@ -103,6 +103,7 @@ pub enum TaskKindEntity {
 }
 
 impl TaskMetaEntity {
+    
     pub fn clean_up(&self) -> String {
         let result = match self.kind {
             TaskKindEntity::Cron | TaskKindEntity::Repeat => matches!(self.status, TaskStatus::Removed),
