@@ -84,8 +84,14 @@ where
         flow.start().await;
     }
 
-    /// Starts the task context, including workers and the task cleaner.
+    /// Starts the task context with workers, leaving task cleanup to be handled manually by the user.
     pub async fn start(self) -> Self {
+        self.start_flow().await; // Start task workers
+        self
+    }
+
+    /// Runs the task context, enabling workers and the task cleaner.
+    pub async fn start_with_cleaner(self) -> Self {
         self.start_flow().await; // Start task workers
         self.start_task_cleaner(); // Start the task cleaner
         self

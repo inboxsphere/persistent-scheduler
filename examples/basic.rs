@@ -19,7 +19,7 @@ async fn main() {
         .register::<MyTask1>()
         .register::<MyTask2>()
         .set_concurrency("default", 10)
-        .start()
+        .start_with_cleaner()
         .await;
     let mut tasks = Vec::new();
     for _ in 0..100 {

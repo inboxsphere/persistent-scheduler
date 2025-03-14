@@ -36,7 +36,7 @@ fn test() {
         .scan()
         .secondary::<TaskMetaEntity>(TaskMetaEntityKey::candidate_task)
         .unwrap()
-        .start_with(false.to_string())
+        .start_with("false")
         .unwrap()
         .try_collect()
         .unwrap();

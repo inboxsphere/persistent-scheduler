@@ -1,12 +1,10 @@
+use crate::core::task_kind::TaskKind;
 use crate::{
-    core::{
-        retry::{RetryPolicy, RetryStrategy},
-    },
+    core::retry::{RetryPolicy, RetryStrategy},
     generate_token, utc_now,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use crate::core::task_kind::TaskKind;
 
 type LinearInterval = u32;
 type ExponentialBase = u32;
@@ -34,6 +32,7 @@ pub struct TaskMeta {
     pub max_retries: Option<u32>,       // Maximum number of retries allowed
     pub is_repeating: bool,             // Indicates if the task is repeating
     pub heartbeat_at: i64,              // Timestamp of the last heartbeat in milliseconds
+    pub created_at: i64,                // Timestamp of the task creation
 }
 
 #[derive(Clone, Debug, Eq, Default, PartialEq, Serialize, Deserialize, Hash)]
@@ -129,6 +128,7 @@ impl TaskMeta {
             is_repeating,
             heartbeat_at: Default::default(),
             delay_seconds,
+            created_at: utc_now!(),
         }
     }
 

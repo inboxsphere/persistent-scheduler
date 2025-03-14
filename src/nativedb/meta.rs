@@ -130,7 +130,7 @@ impl NativeDbTaskStore {
             .scan()
             .secondary::<TaskMetaEntity>(TaskMetaEntityKey::candidate_task)?;
 
-        let iter = scan.start_with(true.to_string())?;
+        let iter = scan.start_with("true")?;
         let tasks: Vec<TaskMetaEntity> = iter
             .filter_map(|item| item.ok().filter(|e| e.next_run <= utc_now!()))
             .take(200)
