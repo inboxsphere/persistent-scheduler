@@ -1,7 +1,7 @@
-use std::{sync::Arc, time::Duration};
 use persistent_scheduler::{
     core::{
         context::{TaskConfiguration, TaskContext},
+        retry::{RetryPolicy, RetryStrategy},
         store::TaskStore,
         task::{Task, TaskFuture},
         task_kind::TaskKind,
@@ -9,6 +9,7 @@ use persistent_scheduler::{
     nativedb::meta::NativeDbTaskStore,
 };
 use serde::{Deserialize, Serialize};
+use std::{sync::Arc, time::Duration};
 
 #[tokio::main]
 async fn main() {
@@ -22,7 +23,8 @@ async fn main() {
         .register::<MyTask1>()
         .register::<MyTask2>()
         .set_concurrency("default", 10)
-        .start().await;
+        .start()
+        .await;
     let context = Arc::new(context);
     let mut tasks = Vec::new();
 
@@ -58,8 +60,17 @@ impl Task for MyTask1 {
 
     const TASK_QUEUE: &'static str = "default";
 
-    //const RETRY_POLICY: RetryPolicy = RetryPolicy::linear(10, Some(5));
-    const DELAY_SECONDS: u32 = 0;
+    fn delay_seconds(&self) -> u32 {
+        1
+    }
+
+    fn retry_policy(&self) -> RetryPolicy {
+        RetryPolicy {
+            strategy: RetryStrategy::Linear { interval: 2 },
+            max_retries: Some(3),
+        }
+    }
+
     fn run(self) -> TaskFuture {
         Box::pin(async move {
             // println!("{}", self.name);

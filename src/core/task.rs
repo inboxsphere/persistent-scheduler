@@ -21,19 +21,20 @@ pub trait Task: Serialize + DeserializeOwned + 'static {
     /// the task will not be processed.
     const TASK_QUEUE: &'static str;
 
-    /// The retry policy for this task.
-    ///
-    /// Defines the strategy and maximum retry attempts in case of failure.
-    /// Default is exponential backoff with a base of 2 and a maximum of 3 retries.
-    const RETRY_POLICY: RetryPolicy = RetryPolicy {
-        strategy: RetryStrategy::Exponential { base: 2 },
-        max_retries: Some(3),
-    };
+    /// Returns the retry policy for this task instance.
+    /// Default is exponential backoff with base 2 and max 3 retries.
+    fn retry_policy(&self) -> RetryPolicy {
+        RetryPolicy {
+            strategy: RetryStrategy::Exponential { base: 2 },
+            max_retries: Some(3),
+        }
+    }
 
-    /// Delay before executing a Once task, in seconds.
-    ///
-    /// Specifies the delay before starting a Once task after it is scheduled.
-    const DELAY_SECONDS: u32 = 3;
+    /// Returns the delay in seconds before executing a Once task.
+    /// Default is 3 seconds.
+    fn delay_seconds(&self) -> u32 {
+        3
+    }
 
     /// Executes the task with the given parameters.
     ///
@@ -52,15 +53,11 @@ pub trait Task: Serialize + DeserializeOwned + 'static {
         match kind {
             TaskKind::Cron { schedule, timezone } => {
                 if !is_valid_cron_string(&*schedule) {
-                    return Err(
-                        format!("Invalid SCHEDULE: '{}' for Cron tasks.", schedule).into(),
-                    );
+                    return Err(format!("Invalid SCHEDULE: '{}' for Cron tasks.", schedule).into());
                 }
 
                 if !is_valid_timezone(&*timezone) {
-                    return Err(
-                        format!("Invalid TIMEZONE: '{}' for Cron tasks.", schedule).into(),
-                    );
+                    return Err(format!("Invalid TIMEZONE: '{}' for Cron tasks.", schedule).into());
                 }
             }
             TaskKind::Repeat { interval_seconds } => {
@@ -96,9 +93,9 @@ pub trait Task: Serialize + DeserializeOwned + 'static {
             ),
             Self::TASK_QUEUE.to_owned(),
             kind,
-            Self::RETRY_POLICY,
+            self.retry_policy(),
             is_repeating,
-            Self::DELAY_SECONDS,
+            self.delay_seconds(),
         )
     }
 }
