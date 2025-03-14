@@ -217,6 +217,7 @@ impl NativeDbTaskStore {
         db: Arc<&'static Database<'static>>,
         task_id: String,
         status: TaskStatus,
+        reason: Option<String>,
     ) -> Result<(), NativeDbTaskStoreError> {
         assert!(matches!(status, TaskStatus::Removed | TaskStatus::Stopped));
 
@@ -225,7 +226,8 @@ impl NativeDbTaskStore {
 
         if let Some(mut task) = task {
             let old = task.clone();
-            task.status = TaskStatus::Removed;
+            task.status = status;
+            task.stopped_reason = reason;
             task.updated_at = utc_now!();
             rw.update(old, task)?;
             rw.commit()?;
@@ -443,20 +445,28 @@ impl TaskStore for NativeDbTaskStore {
         tokio::task::spawn_blocking(move || Self::heartbeat(db, task_id, runner_id)).await?
     }
 
-    async fn set_task_stopped(&self, task_id: &str) -> Result<(), Self::Error> {
+    async fn set_task_stopped(
+        &self,
+        task_id: &str,
+        reason: Option<String>,
+    ) -> Result<(), Self::Error> {
         let db = self.store.clone();
         let task_id = task_id.to_string();
 
-        tokio::task::spawn_blocking(move || Self::set_status(db, task_id, TaskStatus::Stopped))
-            .await?
+        tokio::task::spawn_blocking(move || {
+            Self::set_status(db, task_id, TaskStatus::Stopped, reason)
+        })
+        .await?
     }
 
     async fn set_task_removed(&self, task_id: &str) -> Result<(), Self::Error> {
         let db = self.store.clone();
         let task_id = task_id.to_string();
 
-        tokio::task::spawn_blocking(move || Self::set_status(db, task_id, TaskStatus::Removed))
-            .await?
+        tokio::task::spawn_blocking(move || {
+            Self::set_status(db, task_id, TaskStatus::Removed, None)
+        })
+        .await?
     }
 
     async fn cleanup(&self) -> Result<(), Self::Error> {

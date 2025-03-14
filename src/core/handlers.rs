@@ -80,7 +80,7 @@ impl TaskHandlers {
                 }
 
                 attempts += 1; // Increment the attempts counter.
-                               // Check if there is a maximum retry limit defined.
+                               // Check if there is a maximum retry limit  .
                 if let Some(max) = retry_policy.max_retries {
                     if attempts >= max {
                         warn!(

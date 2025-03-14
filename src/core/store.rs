@@ -1,3 +1,4 @@
+use crate::core::task_kind::TaskKind;
 use crate::{
     core::model::{TaskMeta, TaskStatus},
     utc_now,
@@ -7,7 +8,6 @@ use async_trait::async_trait;
 use std::{error::Error, sync::Arc};
 use thiserror::Error;
 use tokio::sync::RwLock;
-use crate::core::task_kind::TaskKind;
 
 #[async_trait::async_trait]
 pub trait TaskStore: Clone + Send {
@@ -125,7 +125,11 @@ pub trait TaskStore: Clone + Send {
     /// # Returns
     ///
     /// Returns `Ok(())` if the task is successfully marked; returns an error if the task is not found.
-    async fn set_task_stopped(&self, task_id: &str) -> Result<(), Self::Error>;
+    async fn set_task_stopped(
+        &self,
+        task_id: &str,
+        reason: Option<String>,
+    ) -> Result<(), Self::Error>;
 
     /// Marks a task as removed.
     ///
@@ -258,7 +262,6 @@ impl TaskStore for InMemoryTaskStore {
         }
 
         if let Some(next_run_time) = next_run {
-            println!("now to set next_run={}", next_run_time);
             task.last_run = task.next_run;
             task.next_run = next_run_time;
         }
@@ -279,10 +282,15 @@ impl TaskStore for InMemoryTaskStore {
         }
     }
 
-    async fn set_task_stopped(&self, task_id: &str) -> Result<(), Self::Error> {
+    async fn set_task_stopped(
+        &self,
+        task_id: &str,
+        reason: Option<String>,
+    ) -> Result<(), Self::Error> {
         let mut tasks = self.tasks.write().await;
         if let Some(task) = tasks.get_mut(task_id) {
             task.updated_at = utc_now!();
+            task.stopped_reason = reason;
             task.status = TaskStatus::Stopped;
             Ok(())
         } else {
