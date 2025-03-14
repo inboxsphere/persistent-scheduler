@@ -1,10 +1,8 @@
-use crate::core::{
-    cron::next_run, model::TaskMeta, result::TaskResult, store::TaskStore
-};
+use crate::core::task_kind::TaskKind;
+use crate::core::{cron::next_run, model::TaskMeta, result::TaskResult, store::TaskStore};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::error;
-use crate::core::task_kind::TaskKind;
 
 #[derive(Debug)]
 pub enum UpdateRequest {
@@ -80,10 +78,19 @@ impl TaskStatusUpdater {
     {
         // Determine if the task execution was successful
         let is_success = result.is_success();
+        let last_duration_ms = result.last_duration_ms;
+        let last_retry_count = result.last_retry_count;
         let (last_error, next_run) = Self::handle_task_result(result, &task).await;
         // Update the task execution status in the task store
         task_store
-            .update_task_execution_status(&task.id, is_success, last_error, next_run)
+            .update_task_execution_status(
+                &task.id,
+                is_success,
+                last_error,
+                Some(last_duration_ms),
+                Some(last_retry_count),
+                next_run,
+            )
             .await
             .map_err(|e| {
                 format!(
@@ -108,6 +115,7 @@ impl TaskStatusUpdater {
             TaskResult {
                 result: Err(e),
                 task_id,
+                ..
             } => {
                 // Log the error and return it as last_error
                 let last_error = Some(format!("{}, Error message: {}", e.description(), e));

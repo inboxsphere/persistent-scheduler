@@ -54,7 +54,7 @@ impl TaskHandlers {
         let task_id = task_meta.id.clone(); // Clone the task ID for later use.
         let task_key = task_meta.task_key.clone(); // Clone the task key to retrieve the handler.
         let retry_policy = task_meta.retry_policy(); // Get the retry policy associated with the task.
-        let mut attempts = 0; // Initialize the attempt counter.
+        let mut attempts: u32 = 0; // Initialize the attempt counter.
 
         // Define an asynchronous block for task execution with retry logic.
         let execution_future = async move {
@@ -66,16 +66,17 @@ impl TaskHandlers {
                     .map(|handler| execute(handler.clone(), Arc::new(task_meta.clone())));
 
                 // Attempt to execute the task using the found handler.
-                let result = if let Some(execution_future) = handler_option {
+                let mut result = if let Some(execution_future) = handler_option {
                     execution_future.await // Await the execution result.
                 } else {
                     error!("Unrecognized Task '{task_key}'. This error should not occur; it may indicate that the task has not been registered by the developer.");
-                    TaskResult::failure(task_id.clone(), SchedulerError::unrecognized())
+                    TaskResult::failure(task_id.clone(), SchedulerError::unrecognized(), 0, 0)
                     // Handle unrecognized task.
                 };
 
                 // If the execution was successful, return the result.
                 if result.is_success() {
+                    result.last_retry_count = (attempts + 1) as usize; // Update the retry count in the result.
                     return result;
                 }
 
@@ -87,6 +88,7 @@ impl TaskHandlers {
                             "Task {} has exceeded the maximum retry attempts of {}",
                             task_id, max
                         );
+                        result.last_retry_count = max as usize; // Update the retry count in the result.
                         return result; // Return the result after exceeding max retries.
                     }
                 }
@@ -148,22 +150,37 @@ async fn execute(handler: Handler, task_meta: Arc<TaskMeta>) -> TaskResult {
                 "Task '{{{task_name}-{task_id}}}' in queue '{task_queue}' executed successfully, took {:?}",
                 duration
             );
-            TaskResult::success(task_meta.id.clone()) // Return success result.
+            TaskResult::success(task_meta.id.clone(), duration.as_millis() as usize, 0)
+            // Return success result.
         }
         Ok(Err(e)) => {
+            let duration = start.elapsed();
             warn!("Task '{{{task_name}-{task_id}}}' in queue '{task_queue}' errored, {e:#?}");
-            TaskResult::failure(task_meta.id.clone(), e) // Return failure result with the error.
+            TaskResult::failure(task_meta.id.clone(), e, duration.as_millis() as usize, 0)
+            // Return failure result with the error.
         }
         Err(e) if e.is_panic() => {
+            let duration = start.elapsed();
             warn!("Task '{{{task_name}-{task_id}}}' in queue '{task_queue}' panicked");
-            TaskResult::failure(task_meta.id.clone(), SchedulerError::panic()) // Handle panic case.
+            TaskResult::failure(
+                task_meta.id.clone(),
+                SchedulerError::panic(),
+                duration.as_millis() as usize,
+                0,
+            ) // Handle panic case.
         }
         Err(e) => {
             println!(
                 "Task '{{{task_name}}}' in queue '{task_queue}' failed unexpectedly: {:?}",
                 e
             );
-            TaskResult::failure(task_id, SchedulerError::unexpect(e))
+            let duration = start.elapsed();
+            TaskResult::failure(
+                task_id,
+                SchedulerError::unexpect(e),
+                duration.as_millis() as usize,
+                0,
+            )
             // Handle unexpected failure.
         }
     }

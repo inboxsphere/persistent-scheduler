@@ -19,20 +19,24 @@ pub struct TaskMeta {
     pub status: TaskStatus,             // Current status of the task
     pub stopped_reason: Option<String>, // Optional reason for why the task was stopped
     pub last_error: Option<String>,     // Error message from the last execution, if any
-    pub last_run: i64,                  // Timestamp of the last run
-    pub next_run: i64,                  // Timestamp of the next scheduled run
-    pub kind: TaskKind,                 // Type of the task
-    pub success_count: u32,             // Count of successful runs
-    pub failure_count: u32,             // Count of failed runs
-    pub runner_id: Option<String>,      // The ID of the current task runner, may be None
-    pub retry_strategy: Retry,          // Retry strategy for handling failures
-    pub retry_interval: u32,            // Interval for retrying the task
-    pub base_interval: u32,             // Base interval for exponential backoff
-    pub delay_seconds: u32,             //Delay before executing a Once task, specified in seconds
-    pub max_retries: Option<u32>,       // Maximum number of retries allowed
-    pub is_repeating: bool,             // Indicates if the task is repeating
-    pub heartbeat_at: i64,              // Timestamp of the last heartbeat in milliseconds
-    pub created_at: i64,                // Timestamp of the task creation
+    /// Duration of last run in milliseconds, including retries
+    pub last_duration_ms: Option<usize>,
+    /// Number of retries before last completion (success or final failure)
+    pub last_retry_count: Option<usize>,
+    pub last_run: i64,             // Timestamp of the last run
+    pub next_run: i64,             // Timestamp of the next scheduled run
+    pub kind: TaskKind,            // Type of the task
+    pub success_count: u32,        // Count of successful runs
+    pub failure_count: u32,        // Count of failed runs
+    pub runner_id: Option<String>, // The ID of the current task runner, may be None
+    pub retry_strategy: Retry,     // Retry strategy for handling failures
+    pub retry_interval: u32,       // Interval for retrying the task
+    pub base_interval: u32,        // Base interval for exponential backoff
+    pub delay_seconds: u32,        //Delay before executing a Once task, specified in seconds
+    pub max_retries: Option<u32>,  // Maximum number of retries allowed
+    pub is_repeating: bool,        // Indicates if the task is repeating
+    pub heartbeat_at: i64,         // Timestamp of the last heartbeat in milliseconds
+    pub created_at: i64,           // Timestamp of the task creation
 }
 
 #[derive(Clone, Debug, Eq, Default, PartialEq, Serialize, Deserialize, Hash)]
@@ -114,6 +118,8 @@ impl TaskMeta {
             updated_at: utc_now!(),
             status: TaskStatus::Scheduled,
             last_error: Default::default(),
+            last_duration_ms: Default::default(),
+            last_retry_count: Default::default(),
             last_run: Default::default(),
             next_run: Default::default(),
             kind,

@@ -101,6 +101,8 @@ pub trait TaskStore: Clone + Send {
         task_id: &str,
         is_success: bool,
         last_error: Option<String>,
+        last_duration_ms: Option<usize>,
+        last_retry_count: Option<usize>,
         next_run: Option<i64>,
     ) -> Result<(), Self::Error>;
 
@@ -240,6 +242,8 @@ impl TaskStore for InMemoryTaskStore {
         task_id: &str,
         is_success: bool,
         last_error: Option<String>,
+        last_duration_ms: Option<usize>,
+        last_retry_count: Option<usize>,
         next_run: Option<i64>, // when is None?
     ) -> Result<(), Self::Error> {
         let mut tasks = self.tasks.write().await;
@@ -252,6 +256,8 @@ impl TaskStore for InMemoryTaskStore {
             return Ok(());
         }
 
+        task.last_retry_count = last_retry_count;
+        task.last_duration_ms = last_duration_ms;
         if is_success {
             task.success_count += 1;
             task.status = TaskStatus::Success;

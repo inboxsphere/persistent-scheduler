@@ -1,11 +1,11 @@
 [package]
 name = "persistent-scheduler"
-version = "0.5.1"
+version = "0.5.2"
 author = "Tony Dong"
 edition = "2021"
 description = "A high-performance task scheduling system developed in Rust using Tokio. This system supports task persistence, repeatable tasks, Cron-based scheduling, and one-time tasks, ensuring reliability and flexibility for managing time-based operations in various applications."
 license-file = "LICENSE"
-documentation = "https://docs.rs/persistent-scheduler/0.5.1/"
+documentation = "https://docs.rs/persistent-scheduler/0.5.2/"
 repository = "https://github.com/inboxsphere/persistent-scheduler"
 
 [features]

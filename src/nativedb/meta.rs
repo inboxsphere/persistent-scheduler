@@ -159,6 +159,8 @@ impl NativeDbTaskStore {
         task_id: String,
         is_success: bool,
         last_error: Option<String>,
+        last_duration_ms: Option<usize>,
+        last_retry_count: Option<usize>,
         next_run: Option<i64>,
     ) -> Result<(), NativeDbTaskStoreError> {
         let rw = db.rw_transaction()?;
@@ -174,6 +176,9 @@ impl NativeDbTaskStore {
         }
 
         let mut updated_task = task.clone();
+        updated_task.last_duration_ms = last_duration_ms;
+        updated_task.last_retry_count = last_retry_count;
+
         if is_success {
             updated_task.success_count += 1;
             updated_task.status = TaskStatus::Success;
@@ -428,12 +433,22 @@ impl TaskStore for NativeDbTaskStore {
         task_id: &str,
         is_success: bool,
         last_error: Option<String>,
+        last_duration_ms: Option<usize>,
+        last_retry_count: Option<usize>,
         next_run: Option<i64>,
     ) -> Result<(), Self::Error> {
         let db = self.store.clone();
         let task_id = task_id.to_string();
         tokio::task::spawn_blocking(move || {
-            Self::update_status(db, task_id, is_success, last_error, next_run)
+            Self::update_status(
+                db,
+                task_id,
+                is_success,
+                last_error,
+                last_duration_ms,
+                last_retry_count,
+                next_run,
+            )
         })
         .await?
     }
