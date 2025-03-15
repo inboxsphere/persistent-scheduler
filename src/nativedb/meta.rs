@@ -31,6 +31,9 @@ pub enum NativeDbTaskStoreError {
 
     #[error("{0:#?}")]
     Tokio(#[from] tokio::task::JoinError),
+
+    #[error("Error: {0}")]
+    Custom(String), // Custom error message variant
 }
 
 #[derive(Clone)]
@@ -379,6 +382,141 @@ impl NativeDbTaskStore {
         }
         rw.commit()?;
         Ok(())
+    }
+}
+
+pub trait ExternalCall {
+    fn external_get(
+        database: &Arc<Database<'static>>,
+        task_id: String,
+    ) -> Result<Option<TaskMeta>, NativeDbTaskStoreError>;
+
+    fn external_set_status(
+        database: &Arc<Database<'static>>,
+        task_id: String,
+        status: TaskStatus,
+        reason: Option<String>,
+    ) -> Result<(), NativeDbTaskStoreError>;
+
+    fn external_get_queued_once_tasks(
+        database: &Arc<Database<'static>>,
+        page: Option<u64>,
+        page_size: Option<u64>,
+        reverse: Option<bool>,
+    ) -> impl std::future::Future<
+        Output = Result<
+            (
+                Option<u64>,
+                Option<u64>,
+                u64,
+                Option<u64>, 
+                Vec<TaskMetaEntity>,
+            ),
+            NativeDbTaskStoreError,
+        >,
+    > + Send;
+}
+
+impl ExternalCall for NativeDbTaskStore {
+    fn external_get(
+        database: &Arc<Database<'static>>,
+        task_id: String,
+    ) -> Result<Option<TaskMeta>, NativeDbTaskStoreError> {
+        let r = database.r_transaction()?;
+        Ok(r.get().primary(task_id)?.map(|e: TaskMetaEntity| e.into()))
+    }
+
+    fn external_set_status(
+        database: &Arc<Database<'static>>,
+        task_id: String,
+        status: TaskStatus,
+        reason: Option<String>,
+    ) -> Result<(), NativeDbTaskStoreError> {
+        assert!(matches!(status, TaskStatus::Removed | TaskStatus::Stopped));
+
+        let rw = database.rw_transaction()?;
+        let task = rw.get().primary::<TaskMetaEntity>(task_id)?;
+
+        if let Some(mut task) = task {
+            let old = task.clone();
+            task.status = status;
+            task.stopped_reason = reason;
+            task.updated_at = utc_now!();
+            rw.update(old, task)?;
+            rw.commit()?;
+            Ok(())
+        } else {
+            Err(NativeDbTaskStoreError::TaskNotFound)
+        }
+    }
+
+    async fn external_get_queued_once_tasks(
+        database: &Arc<Database<'static>>,
+        page: Option<u64>,
+        page_size: Option<u64>,
+        reverse: Option<bool>,
+    ) -> Result<
+        (
+            Option<u64>,
+            Option<u64>,
+            u64,
+            Option<u64>,
+            Vec<TaskMetaEntity>,
+        ),
+        NativeDbTaskStoreError,
+    > {
+        let db = database.clone();
+        tokio::task::spawn_blocking(move || {
+            let r_transaction = db.r_transaction()?;
+            let scan = r_transaction
+                .scan()
+                .secondary(TaskMetaEntityKey::queued_once_task)?;
+            let iter = scan.start_with("true")?;
+            let total_items = iter.count() as u64;
+
+            // Validate page and page_size
+            let (offset, total_pages) = if let (Some(p), Some(s)) = (page, page_size) {
+                if p == 0 || s == 0 {
+                    return Err(NativeDbTaskStoreError::Custom(
+                        "'page' and 'page_size' must be greater than 0.".into(),
+                    ));
+                }
+                let offset = (p - 1) * s;
+                let total_pages = if total_items > 0 {
+                    (total_items as f64 / s as f64).ceil() as u64
+                } else {
+                    0
+                };
+                (Some(offset), Some(total_pages))
+            } else {
+                (None, None)
+            };
+
+            // Handle empty result early
+            if let Some(offset) = offset {
+                if offset >= total_items {
+                    return Ok((page, page_size, total_items, total_pages, vec![]));
+                }
+            }
+
+            let iter = scan.start_with("true")?;
+
+            // Collect items based on the reverse flag and pagination
+            let items: Vec<TaskMetaEntity> = match reverse {
+                Some(true) => iter
+                    .rev()
+                    .skip(offset.unwrap_or(0) as usize)
+                    .take(page_size.unwrap_or(total_items) as usize)
+                    .try_collect()?,
+                _ => iter
+                    .skip(offset.unwrap_or(0) as usize)
+                    .take(page_size.unwrap_or(total_items) as usize)
+                    .try_collect()?,
+            };
+
+            Ok((page, page_size, total_items, total_pages, items))
+        })
+        .await?
     }
 }
 
