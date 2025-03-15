@@ -383,58 +383,24 @@ impl NativeDbTaskStore {
         rw.commit()?;
         Ok(())
     }
-}
 
-pub trait ExternalCall {
-    fn external_get(
-        database: &Arc<Database<'static>>,
-        task_id: String,
-    ) -> Result<Option<TaskMeta>, NativeDbTaskStoreError>;
-
-    fn external_set_status(
-        database: &Arc<Database<'static>>,
-        task_id: String,
-        status: TaskStatus,
-        reason: Option<String>,
-    ) -> Result<(), NativeDbTaskStoreError>;
-
-    fn external_get_queued_once_tasks(
-        database: &Arc<Database<'static>>,
-        page: Option<u64>,
-        page_size: Option<u64>,
-        reverse: Option<bool>,
-    ) -> impl std::future::Future<
-        Output = Result<
-            (
-                Option<u64>,
-                Option<u64>,
-                u64,
-                Option<u64>, 
-                Vec<TaskMetaEntity>,
-            ),
-            NativeDbTaskStoreError,
-        >,
-    > + Send;
-}
-
-impl ExternalCall for NativeDbTaskStore {
-    fn external_get(
-        database: &Arc<Database<'static>>,
+    pub fn external_get(
+        &self,
         task_id: String,
     ) -> Result<Option<TaskMeta>, NativeDbTaskStoreError> {
-        let r = database.r_transaction()?;
+        let r = self.store.r_transaction()?;
         Ok(r.get().primary(task_id)?.map(|e: TaskMetaEntity| e.into()))
     }
 
-    fn external_set_status(
-        database: &Arc<Database<'static>>,
+    pub fn external_set_status(
+        &self,
         task_id: String,
         status: TaskStatus,
         reason: Option<String>,
     ) -> Result<(), NativeDbTaskStoreError> {
         assert!(matches!(status, TaskStatus::Removed | TaskStatus::Stopped));
 
-        let rw = database.rw_transaction()?;
+        let rw = self.store.rw_transaction()?;
         let task = rw.get().primary::<TaskMetaEntity>(task_id)?;
 
         if let Some(mut task) = task {
@@ -450,8 +416,8 @@ impl ExternalCall for NativeDbTaskStore {
         }
     }
 
-    async fn external_get_queued_once_tasks(
-        database: &Arc<Database<'static>>,
+    pub async fn external_get_queued_once_tasks(
+        &self,
         page: Option<u64>,
         page_size: Option<u64>,
         reverse: Option<bool>,
@@ -465,7 +431,7 @@ impl ExternalCall for NativeDbTaskStore {
         ),
         NativeDbTaskStoreError,
     > {
-        let db = database.clone();
+        let db = self.store.clone();
         tokio::task::spawn_blocking(move || {
             let r_transaction = db.r_transaction()?;
             let scan = r_transaction
