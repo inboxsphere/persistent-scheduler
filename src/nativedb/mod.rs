@@ -57,7 +57,7 @@ pub fn get_database() -> Result<&'static Database<'static>, SchedulerError> {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[native_model(id = 1, version = 1)]
-#[native_db(secondary_key(clean_up -> String), secondary_key(candidate_task -> String))]
+#[native_db(secondary_key(clean_up -> String), secondary_key(candidate_task -> String), secondary_key(queued_once_task -> String))]
 pub struct TaskMetaEntity {
     #[primary_key]
     pub id: String, // Unique identifier for the task
@@ -116,6 +116,17 @@ impl TaskMetaEntity {
             TaskKindEntity::Once => matches!(
                 self.status,
                 TaskStatus::Removed | TaskStatus::Success | TaskStatus::Failed
+            ),
+        };
+        result.to_string()
+    }
+
+    pub fn queued_once_task(&self) -> String {
+        let result = match self.kind {
+            TaskKindEntity::Cron | TaskKindEntity::Repeat => false,
+            TaskKindEntity::Once => matches!(
+                self.status,
+                TaskStatus::Scheduled | TaskStatus::Running | TaskStatus::Failed
             ),
         };
         result.to_string()
