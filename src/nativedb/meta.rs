@@ -387,9 +387,9 @@ impl NativeDbTaskStore {
     pub fn external_get(
         &self,
         task_id: String,
-    ) -> Result<Option<TaskMeta>, NativeDbTaskStoreError> {
+    ) -> Result<Option<TaskMetaEntity>, NativeDbTaskStoreError> {
         let r = self.store.r_transaction()?;
-        Ok(r.get().primary(task_id)?.map(|e: TaskMetaEntity| e.into()))
+        Ok(r.get().primary(task_id)?)
     }
 
     pub fn external_set_status(
